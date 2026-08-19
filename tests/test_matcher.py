@@ -85,6 +85,18 @@ def test_match_files_unmatched_returns_false(tmp_path: Path):
 @pytest.mark.parametrize(
     "filename, expected",
     [
+        ("ep12345.mkv", (None, None)),
+        # Known false positive until commit 12 bounds bare numbers by episode count
+        ("Show.name.2020.mkv", (None, 2020)),
+    ],
+)
+def test_extract_episode_trailing_anchored(filename: str, expected: tuple[int | None, int | None]):
+    assert extract_episode(filename) == expected
+
+
+@pytest.mark.parametrize(
+    "filename, expected",
+    [
         # Multi-digit episode numbers (anime)
         ("S01E100.mkv", (1, 100)),
         ("S01E0100.mkv", (1, 100)),

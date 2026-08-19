@@ -31,7 +31,7 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 
 # Bare number: leading ("01 - title.mp4") or trailing after non-digit chars ("死神粤语01.ts")
 _BARE_LEADING = re.compile(r"^(\d{1,4})")
-_BARE_TRAILING = re.compile(r"(\d{1,4})\.\w+$")
+_BARE_TRAILING = re.compile(r"(?<!\d)(\d{1,4})$")
 
 
 def extract_episode(filename: str) -> tuple[int | None, int | None]:
@@ -51,11 +51,10 @@ def extract_episode(filename: str) -> tuple[int | None, int | None]:
             return None, num
 
     stem = Path(filename).stem
-    m = _BARE_TRAILING.search(filename)
+    m = _BARE_TRAILING.search(stem)
     if m:
         candidate = int(m.group(1))
-        # Only accept if the number is in the stem (not the extension)
-        if m.group(1) in stem and candidate > 0:
+        if candidate > 0:
             return None, candidate
 
     return None, None
