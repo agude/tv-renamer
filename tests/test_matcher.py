@@ -60,3 +60,44 @@ def test_match_files_chinese_names(tmp_path: Path):
     assert results[1].episode == 2
     assert results[2].episode == 3
     assert all(r.season is None for r in results)
+
+
+def test_match_files_excludes_non_media(tmp_path: Path):
+    (tmp_path / "S01E01 - Pilot.mkv").touch()
+    (tmp_path / "cover.jpg").touch()
+    (tmp_path / "notes.txt").touch()
+    (tmp_path / "subtitles.srt").touch()
+
+    results = match_files(tmp_path)
+    assert len(results) == 1
+
+
+def test_match_files_unmatched_returns_false(tmp_path: Path):
+    (tmp_path / "random_movie.mkv").touch()
+
+    results = match_files(tmp_path)
+    assert len(results) == 1
+    assert not results[0].matched
+    assert results[0].episode is None
+    assert results[0].season is None
+
+
+@pytest.mark.parametrize(
+    "filename, expected",
+    [
+        # Multi-digit episode numbers (anime)
+        ("S01E100.mkv", (1, 100)),
+        ("S01E0100.mkv", (1, 100)),
+        ("S01E1000.mkv", (1, 1000)),
+        # Double-digit seasons
+        ("S10E01.mkv", (10, 1)),
+        ("S99E99.mkv", (99, 99)),
+        # 1x format with large episodes
+        ("1x100 - Title.mp4", (1, 100)),
+        # Large bare numbers
+        ("100 Title.mp4", (None, 100)),
+        ("1000 Title.mp4", (None, 1000)),
+    ],
+)
+def test_extract_episode_multi_digit(filename: str, expected: tuple[int | None, int | None]):
+    assert extract_episode(filename) == expected

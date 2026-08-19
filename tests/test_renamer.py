@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from tv_renamer.renamer import execute_renames, plan_renames, write_nfo
+from tv_renamer.renamer import _safe_name, execute_renames, plan_renames, show_dir_name, write_nfo
 from tv_renamer.tmdb import Episode
 
 
@@ -133,3 +133,84 @@ def test_write_nfo(tmp_path: Path):
     content = nfo.read_text()
     assert "<tmdbid>246</tmdbid>" in content
     assert "<title>Avatar: The Last Airbender</title>" in content
+
+
+class TestSafeName:
+    def test_removes_colon(self):
+        assert _safe_name("Show: Test") == "Show Test"
+
+    def test_removes_quotes(self):
+        assert _safe_name('The "Best" Show') == "The Best Show"
+
+    def test_removes_question_mark(self):
+        assert _safe_name("Who?") == "Who"
+
+    def test_removes_multiple_unsafe(self):
+        assert _safe_name('A:B<C>D"E') == "ABCDE"
+
+    def test_strips_whitespace(self):
+        assert _safe_name("  Show  ") == "Show"
+
+    def test_passthrough_safe_name(self):
+        assert _safe_name("Perfectly Normal Name") == "Perfectly Normal Name"
+
+    def test_empty_after_stripping(self):
+        assert _safe_name(':::"""') == ""
+
+    def test_unicode_preserved(self):
+        assert _safe_name("死神粤语") == "死神粤语"
+
+
+class TestShowDirName:
+    def test_standard_format(self):
+        assert show_dir_name("Test Show", "2020", 99999) == "Test Show (2020) [tmdbid-99999]"
+
+    def test_unsafe_chars_stripped(self):
+        result = show_dir_name("Show: Test", "2020", 1)
+        assert ":" not in result
+        assert "[tmdbid-1]" in result
+
+
+class TestPlanRenamesMultiSeason:
+    def test_multi_season_routing(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "S01E01 - Pilot.mp4").touch()
+        (src / "S02E01 - Premiere.mp4").touch()
+        (src / "S02E02 - Second.mp4").touch()
+
+        episodes = [
+            Episode(season=1, episode=1, name="Pilot"),
+            Episode(season=2, episode=1, name="Premiere"),
+            Episode(season=2, episode=2, name="Second"),
+        ]
+        ops = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+
+        assert len(ops) == 3
+        s1_ops = [op for op in ops if "Season 1" in str(op.dest)]
+        s2_ops = [op for op in ops if "Season 2" in str(op.dest)]
+        assert len(s1_ops) == 1
+        assert len(s2_ops) == 2
+
+    def test_season_override_forces_all_to_one_season(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "01.mp4").touch()
+        (src / "02.mp4").touch()
+
+        episodes = [
+            Episode(season=3, episode=1, name="First"),
+            Episode(season=3, episode=2, name="Second"),
+        ]
+        ops = plan_renames(
+            src,
+            show_name="Show",
+            year="2020",
+            tmdb_id=99999,
+            episodes=episodes,
+            season_override=3,
+        )
+
+        assert len(ops) == 2
+        assert all("Season 3" in str(op.dest) for op in ops)
+        assert all("S03E" in op.dest.name for op in ops)
