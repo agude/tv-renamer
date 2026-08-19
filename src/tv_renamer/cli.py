@@ -107,6 +107,15 @@ def _cmd_rename(args: argparse.Namespace) -> None:
                 print(f"    {p.name}")
         return
 
+    if plan.collisions:
+        print("  Collisions detected — multiple files resolve to the same destination:\n")
+        for dest, srcs in plan.collisions.items():
+            print(f"    {dest.name}")
+            for src_path in srcs:
+                print(f"      <- {src_path.name}")
+        print(f"\n  {len(plan.collisions)} collision(s). No files renamed.")
+        sys.exit(1)
+
     for op in plan.ops:
         label = "[DRY RUN] " if dry_run else ""
         print(f"  {label}{op.source.name}")

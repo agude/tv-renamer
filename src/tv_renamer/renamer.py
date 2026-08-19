@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import re
 import shutil
-from dataclasses import dataclass
+from collections import defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from xml.sax.saxutils import escape
 
@@ -22,6 +23,7 @@ class RenameOp:
 class RenamePlan:
     ops: list[RenameOp]
     unmatched: list[Path]
+    collisions: dict[Path, list[Path]] = field(default_factory=dict)
 
 
 # Characters illegal in filenames on most filesystems.
@@ -102,7 +104,12 @@ def plan_renames(
         dest = out_root / dir_name / f"Season {season}" / new_name
         ops.append(RenameOp(source=fm.path, dest=dest))
 
-    return RenamePlan(ops=ops, unmatched=unmatched)
+    dest_sources: dict[Path, list[Path]] = defaultdict(list)
+    for op in ops:
+        dest_sources[op.dest].append(op.source)
+    collisions = {dest: srcs for dest, srcs in dest_sources.items() if len(srcs) > 1}
+
+    return RenamePlan(ops=ops, unmatched=unmatched, collisions=collisions)
 
 
 def write_nfo(show_dir: Path, show_name: str, tmdb_id: int) -> Path:

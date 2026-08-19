@@ -232,6 +232,54 @@ class TestRenameCommand:
         out = capsys.readouterr().out
         assert "No files matched" in out
 
+    @patch("tv_renamer.cli.get_episodes")
+    @patch("tv_renamer.cli.get_show")
+    def test_rename_collisions_exit_nonzero(self, mock_show, mock_eps, tmp_path: Path, capsys):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "S01E01.mkv").touch()
+        (src / "01 - other rip.mkv").touch()
+
+        mock_show.return_value = ShowInfo(
+            tmdb_id=99999,
+            name="Test Show",
+            first_air_date="2020-01-01",
+            seasons=[],
+        )
+        mock_eps.return_value = [Episode(season=1, episode=1, name="Pilot")]
+
+        with pytest.raises(SystemExit, match="1"):
+            main(["rename", str(src), "--id", "99999", "--season", "1"])
+
+        out = capsys.readouterr().out
+        assert "Collisions" in out
+        assert (src / "S01E01.mkv").exists()
+        assert (src / "01 - other rip.mkv").exists()
+
+    @patch("tv_renamer.cli.get_episodes")
+    @patch("tv_renamer.cli.get_show")
+    def test_rename_collisions_dry_run_exit_nonzero(
+        self, mock_show, mock_eps, tmp_path: Path, capsys
+    ):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "S01E01.mkv").touch()
+        (src / "01 - other rip.mkv").touch()
+
+        mock_show.return_value = ShowInfo(
+            tmdb_id=99999,
+            name="Test Show",
+            first_air_date="2020-01-01",
+            seasons=[],
+        )
+        mock_eps.return_value = [Episode(season=1, episode=1, name="Pilot")]
+
+        with pytest.raises(SystemExit, match="1"):
+            main(["rename", str(src), "--id", "99999", "--season", "1", "--dry-run"])
+
+        out = capsys.readouterr().out
+        assert "Collisions" in out
+
 
 class TestCopyCommand:
     @patch("tv_renamer.cli.copy_to_dest")

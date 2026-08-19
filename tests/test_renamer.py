@@ -254,6 +254,51 @@ class TestRenamePlanUnmatched:
         assert isinstance(plan.unmatched, list)
 
 
+class TestRenamePlanCollisions:
+    def test_duplicate_destinations_detected(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "S01E01.mkv").touch()
+        (src / "01 - other rip.mkv").touch()
+
+        episodes = _make_episodes(1, 5)
+        plan = plan_renames(
+            src,
+            show_name="Show",
+            year="2020",
+            tmdb_id=99999,
+            episodes=episodes,
+            season_override=1,
+        )
+
+        assert len(plan.collisions) == 1
+        collision_sources = next(iter(plan.collisions.values()))
+        assert len(collision_sources) == 2
+
+    def test_different_extensions_are_not_collisions(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "S01E01.mkv").touch()
+        (src / "S01E01.mp4").touch()
+
+        episodes = _make_episodes(1, 5)
+        plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+
+        assert len(plan.collisions) == 0
+        assert len(plan.ops) == 2
+
+    def test_no_collisions_when_all_unique(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "S01E01.mkv").touch()
+        (src / "S01E02.mkv").touch()
+
+        episodes = _make_episodes(1, 2)
+        plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+
+        assert len(plan.collisions) == 0
+
+
 class TestWriteNfoXmlEscape:
     @pytest.mark.parametrize(
         "title",
