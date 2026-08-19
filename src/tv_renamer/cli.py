@@ -6,6 +6,8 @@ import argparse
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from tv_renamer.copier import copy_to_dest
 from tv_renamer.renamer import execute_renames, plan_renames
 from tv_renamer.scanner import scan_directory
@@ -123,6 +125,8 @@ def _cmd_copy(args: argparse.Namespace) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    load_dotenv()
+
     parser = argparse.ArgumentParser(
         prog="tv-renamer",
         description="Rename and organize TV media files for Jellyfin.",

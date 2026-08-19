@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 
 import requests
 
 BASE_URL = "https://api.themoviedb.org/3"
+USER_AGENT = "tv-renamer/0.1 (alex.public.account@gmail.com)"
+RATE_LIMIT_SECS = 0.25
+
 MEDIA_EXTENSIONS = frozenset(
     {
         ".mkv",
@@ -69,16 +73,34 @@ class SeasonSummary:
     name: str
 
 
-def search_tv(query: str) -> list[SearchResult]:
-    resp = requests.get(
-        f"{BASE_URL}/search/tv",
-        params={"api_key": _api_key(), "query": query},
-        timeout=10,
-    )
-    resp.raise_for_status()
-    results: list[SearchResult] = []
-    for item in resp.json().get("results", []):
-        results.append(
+class TMDBClient:
+    """TMDB API client with rate limiting and session reuse."""
+
+    def __init__(self) -> None:
+        self._session = requests.Session()
+        self._session.headers["User-Agent"] = USER_AGENT
+        self._session.headers["Accept"] = "application/json"
+        self._last_request: float = 0.0
+
+    def _rate_limit(self) -> None:
+        elapsed = time.monotonic() - self._last_request
+        if elapsed < RATE_LIMIT_SECS:
+            time.sleep(RATE_LIMIT_SECS - elapsed)
+        self._last_request = time.monotonic()
+
+    def _get(self, path: str, **params: str | int) -> dict:  # type: ignore[type-arg]
+        self._rate_limit()
+        resp = self._session.get(
+            f"{BASE_URL}{path}",
+            params={"api_key": _api_key(), **params},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return resp.json()  # type: ignore[no-any-return]
+
+    def search_tv(self, query: str) -> list[SearchResult]:
+        data = self._get("/search/tv", query=query)
+        return [
             SearchResult(
                 tmdb_id=item["id"],
                 name=item.get("name", ""),
@@ -86,20 +108,12 @@ def search_tv(query: str) -> list[SearchResult]:
                 overview=item.get("overview", ""),
                 media_type="tv",
             )
-        )
-    return results
+            for item in data.get("results", [])
+        ]
 
-
-def search_movie(query: str) -> list[SearchResult]:
-    resp = requests.get(
-        f"{BASE_URL}/search/movie",
-        params={"api_key": _api_key(), "query": query},
-        timeout=10,
-    )
-    resp.raise_for_status()
-    results: list[SearchResult] = []
-    for item in resp.json().get("results", []):
-        results.append(
+    def search_movie(self, query: str) -> list[SearchResult]:
+        data = self._get("/search/movie", query=query)
+        return [
             SearchResult(
                 tmdb_id=item["id"],
                 name=item.get("title", ""),
@@ -107,48 +121,60 @@ def search_movie(query: str) -> list[SearchResult]:
                 overview=item.get("overview", ""),
                 media_type="movie",
             )
+            for item in data.get("results", [])
+        ]
+
+    def get_show(self, tmdb_id: int) -> ShowInfo:
+        data = self._get(f"/tv/{tmdb_id}")
+        seasons = [
+            SeasonSummary(
+                season_number=s["season_number"],
+                episode_count=s["episode_count"],
+                name=s.get("name", ""),
+            )
+            for s in data.get("seasons", [])
+        ]
+        return ShowInfo(
+            tmdb_id=data["id"],
+            name=data["name"],
+            first_air_date=data.get("first_air_date", ""),
+            seasons=seasons,
         )
-    return results
 
-
-def get_show(tmdb_id: int) -> ShowInfo:
-    resp = requests.get(
-        f"{BASE_URL}/tv/{tmdb_id}",
-        params={"api_key": _api_key()},
-        timeout=10,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    seasons = [
-        SeasonSummary(
-            season_number=s["season_number"],
-            episode_count=s["episode_count"],
-            name=s.get("name", ""),
-        )
-        for s in data.get("seasons", [])
-    ]
-    return ShowInfo(
-        tmdb_id=data["id"],
-        name=data["name"],
-        first_air_date=data.get("first_air_date", ""),
-        seasons=seasons,
-    )
-
-
-def get_episodes(tmdb_id: int, season: int) -> list[Episode]:
-    resp = requests.get(
-        f"{BASE_URL}/tv/{tmdb_id}/season/{season}",
-        params={"api_key": _api_key()},
-        timeout=10,
-    )
-    resp.raise_for_status()
-    episodes: list[Episode] = []
-    for ep in resp.json().get("episodes", []):
-        episodes.append(
+    def get_episodes(self, tmdb_id: int, season: int) -> list[Episode]:
+        data = self._get(f"/tv/{tmdb_id}/season/{season}")
+        return [
             Episode(
                 season=ep["season_number"],
                 episode=ep["episode_number"],
                 name=ep.get("name", ""),
             )
-        )
-    return episodes
+            for ep in data.get("episodes", [])
+        ]
+
+
+# Module-level convenience functions using a shared client instance.
+_client: TMDBClient | None = None
+
+
+def _get_client() -> TMDBClient:
+    global _client
+    if _client is None:
+        _client = TMDBClient()
+    return _client
+
+
+def search_tv(query: str) -> list[SearchResult]:
+    return _get_client().search_tv(query)
+
+
+def search_movie(query: str) -> list[SearchResult]:
+    return _get_client().search_movie(query)
+
+
+def get_show(tmdb_id: int) -> ShowInfo:
+    return _get_client().get_show(tmdb_id)
+
+
+def get_episodes(tmdb_id: int, season: int) -> list[Episode]:
+    return _get_client().get_episodes(tmdb_id, season)

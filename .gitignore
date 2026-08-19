@@ -1,5 +1,6 @@
 # Python
 __pycache__/
+.coverage
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
@@ -7,6 +8,9 @@ __pycache__/
 dist/
 build/
 *.egg-info/
+
+# Secrets
+.env
 
 # uv — .venv is local; uv.lock is committed (do not add it here)
 .venv/
