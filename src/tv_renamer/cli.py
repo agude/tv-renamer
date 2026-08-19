@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
+from requests import HTTPError
 
 from tv_renamer.copier import copy_to_dest
 from tv_renamer.renamer import execute_renames, parse_log, plan_renames, undo_renames
@@ -183,7 +184,16 @@ def _cmd_copy(args: argparse.Namespace) -> None:
     copy_to_dest(source, dest, dry_run=dry_run)
 
 
-def main(argv: list[str] | None = None) -> None:
+def _http_message(exc: HTTPError) -> str:
+    if exc.response is not None:
+        if exc.response.status_code == 401:
+            return "TMDB_API_KEY is invalid or expired"
+        if exc.response.status_code == 404:
+            return "no such TMDB id"
+    return str(exc)
+
+
+def main(argv: list[str] | None = None) -> int:
     load_dotenv()
 
     parser = argparse.ArgumentParser(
@@ -238,10 +248,20 @@ def main(argv: list[str] | None = None) -> None:
     p_copy.set_defaults(func=_cmd_copy)
 
     args = parser.parse_args(argv)
-    if getattr(args, "needs_client", False):
-        args.client = TMDBClient()
-    args.func(args)
+
+    try:
+        if getattr(args, "needs_client", False):
+            args.client = TMDBClient()
+        args.func(args)
+    except HTTPError as exc:
+        print(f"error: {_http_message(exc)}", file=sys.stderr)
+        return 1
+    except (OSError, RuntimeError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+
+    return 0
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    sys.exit(main(sys.argv[1:]))

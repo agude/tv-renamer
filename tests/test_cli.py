@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+from requests import HTTPError, Response
 
 from tv_renamer.cli import main
 from tv_renamer.tmdb import Episode, SearchResult, SeasonSummary, ShowInfo
@@ -317,3 +318,49 @@ class TestCopyCommand:
         mock_copy.assert_called_once_with(src, dest, dry_run=True)
         out = capsys.readouterr().out
         assert "DRY RUN" in out
+
+
+class TestErrorBoundary:
+    def test_scan_nonexistent_dir_exits_1(self, capsys):
+        ret = main(["scan", "/nonexistent/path"])
+        assert ret == 1
+        err = capsys.readouterr().err
+        assert "error:" in err
+
+    def test_successful_command_returns_0(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        ret = main(["scan", str(src)])
+        assert ret == 0
+
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_missing_api_key_exits_1(self, MockClient: MagicMock, capsys):
+        MockClient.side_effect = RuntimeError("TMDB_API_KEY environment variable is not set")
+        ret = main(["search", "test"])
+        assert ret == 1
+        err = capsys.readouterr().err
+        assert "TMDB_API_KEY" in err
+
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_http_401_names_env_var(self, MockClient: MagicMock, capsys):
+        resp = Response()
+        resp.status_code = 401
+        client = _mock_client()
+        client.search_tv.side_effect = HTTPError(response=resp)
+        MockClient.return_value = client
+        ret = main(["search", "test"])
+        assert ret == 1
+        err = capsys.readouterr().err
+        assert "TMDB_API_KEY is invalid or expired" in err
+
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_http_404_says_no_such_id(self, MockClient: MagicMock, capsys):
+        resp = Response()
+        resp.status_code = 404
+        client = _mock_client()
+        client.get_show.side_effect = HTTPError(response=resp)
+        MockClient.return_value = client
+        ret = main(["episodes", "999999"])
+        assert ret == 1
+        err = capsys.readouterr().err
+        assert "no such TMDB id" in err
