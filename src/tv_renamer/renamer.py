@@ -73,7 +73,11 @@ def plan_renames(
             continue
         assert fm.episode is not None
 
-        season = season_override if season_override is not None else (fm.season or 1)
+        season = (
+            season_override
+            if season_override is not None
+            else (fm.season if fm.season is not None else 1)
+        )
         key = (season, fm.episode)
 
         ep = ep_by_num.get(key)

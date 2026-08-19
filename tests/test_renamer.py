@@ -161,6 +161,51 @@ class TestSafeName:
         assert _safe_name("死神粤语") == "死神粤语"
 
 
+class TestPlanRenamesSpecials:
+    def test_season_zero_stays_in_season_zero(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "Show.S00E03.mkv").touch()
+
+        episodes = [Episode(season=0, episode=3, name="Special Three")]
+        ops = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+
+        assert len(ops) == 1
+        assert "Season 0" in str(ops[0].dest)
+        assert "S00E03" in ops[0].dest.name
+
+    def test_season_override_zero_honored(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "01.mp4").touch()
+
+        episodes = [Episode(season=0, episode=1, name="Pilot Special")]
+        ops = plan_renames(
+            src,
+            show_name="Show",
+            year="2020",
+            tmdb_id=99999,
+            episodes=episodes,
+            season_override=0,
+        )
+
+        assert len(ops) == 1
+        assert "Season 0" in str(ops[0].dest)
+        assert "S00E01" in ops[0].dest.name
+
+    def test_no_season_defaults_to_one(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "01title.ts").touch()
+
+        episodes = _make_episodes(1, 1)
+        ops = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+
+        assert len(ops) == 1
+        assert "Season 1" in str(ops[0].dest)
+        assert "S01E01" in ops[0].dest.name
+
+
 class TestShowDirName:
     def test_standard_format(self):
         assert show_dir_name("Test Show", "2020", 99999) == "Test Show (2020) [tmdbid-99999]"
