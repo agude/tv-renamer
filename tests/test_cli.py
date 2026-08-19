@@ -1,7 +1,7 @@
 """Tests for CLI argument parsing and subcommand wiring."""
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -24,9 +24,21 @@ def test_rename_requires_id():
         main(["rename", "/tmp/fake"])
 
 
+def _mock_client(**overrides: object) -> MagicMock:
+    client = MagicMock()
+    client.search_tv.return_value = overrides.get("search_tv", [])
+    client.search_movie.return_value = overrides.get("search_movie", [])
+    client.get_show.return_value = overrides.get(
+        "get_show",
+        ShowInfo(tmdb_id=1, name="Show", first_air_date="2020-01-01", seasons=[]),
+    )
+    client.get_episodes.return_value = overrides.get("get_episodes", [])
+    return client
+
+
 class TestScanCommand:
     @patch("tv_renamer.cli.scan_directory")
-    def test_scan_calls_scanner(self, mock_scan, tmp_path: Path, capsys):
+    def test_scan_calls_scanner(self, mock_scan: MagicMock, tmp_path: Path, capsys: object):
         from tv_renamer.scanner import ScanResult
 
         mock_scan.return_value = ScanResult(root=tmp_path)
@@ -35,7 +47,7 @@ class TestScanCommand:
         mock_scan.assert_called_once_with(tmp_path)
 
     @patch("tv_renamer.cli.scan_directory")
-    def test_scan_prints_loose_files(self, mock_scan, tmp_path: Path, capsys):
+    def test_scan_prints_loose_files(self, mock_scan: MagicMock, tmp_path: Path, capsys):
         from tv_renamer.scanner import LooseFile, ScanResult
 
         mock_scan.return_value = ScanResult(
@@ -48,7 +60,7 @@ class TestScanCommand:
         assert "movie.mkv" in out
 
     @patch("tv_renamer.cli.scan_directory")
-    def test_scan_prints_shows(self, mock_scan, tmp_path: Path, capsys):
+    def test_scan_prints_shows(self, mock_scan: MagicMock, tmp_path: Path, capsys):
         from tv_renamer.scanner import ScanResult, ShowEntry
 
         mock_scan.return_value = ScanResult(
@@ -69,53 +81,65 @@ class TestScanCommand:
         assert "5 episodes" in out
         assert "season folders" in out
 
+    def test_scan_works_without_api_key(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        with patch.dict("os.environ", {}, clear=True):
+            main(["scan", str(src)])
+
 
 class TestSearchCommand:
-    @patch("tv_renamer.cli.search_tv")
-    @patch("tv_renamer.cli.search_movie")
-    def test_search_both_by_default(self, mock_movie, mock_tv, capsys):
-        mock_tv.return_value = [
-            SearchResult(
-                tmdb_id=1, name="Test", first_air_date="2020-01-01", overview="", media_type="tv"
-            ),
-        ]
-        mock_movie.return_value = []
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_search_both_by_default(self, MockClient: MagicMock, capsys):
+        client = _mock_client(
+            search_tv=[
+                SearchResult(
+                    tmdb_id=1,
+                    name="Test",
+                    first_air_date="2020-01-01",
+                    overview="",
+                    media_type="tv",
+                ),
+            ]
+        )
+        MockClient.return_value = client
         main(["search", "test"])
 
-        mock_tv.assert_called_once_with("test")
-        mock_movie.assert_called_once_with("test")
+        client.search_tv.assert_called_once_with("test")
+        client.search_movie.assert_called_once_with("test")
 
-    @patch("tv_renamer.cli.search_tv")
-    @patch("tv_renamer.cli.search_movie")
-    def test_search_tv_only(self, mock_movie, mock_tv, capsys):
-        mock_tv.return_value = []
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_search_tv_only(self, MockClient: MagicMock, capsys):
+        client = _mock_client()
+        MockClient.return_value = client
         main(["search", "test", "--type", "tv"])
 
-        mock_tv.assert_called_once()
-        mock_movie.assert_not_called()
+        client.search_tv.assert_called_once()
+        client.search_movie.assert_not_called()
 
-    @patch("tv_renamer.cli.search_tv")
-    @patch("tv_renamer.cli.search_movie")
-    def test_search_movie_only(self, mock_movie, mock_tv, capsys):
-        mock_movie.return_value = []
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_search_movie_only(self, MockClient: MagicMock, capsys):
+        client = _mock_client()
+        MockClient.return_value = client
         main(["search", "test", "--type", "movie"])
 
-        mock_tv.assert_not_called()
-        mock_movie.assert_called_once()
+        client.search_tv.assert_not_called()
+        client.search_movie.assert_called_once()
 
-    @patch("tv_renamer.cli.search_tv")
-    @patch("tv_renamer.cli.search_movie")
-    def test_search_prints_results(self, mock_movie, mock_tv, capsys):
-        mock_tv.return_value = [
-            SearchResult(
-                tmdb_id=246,
-                name="Avatar",
-                first_air_date="2005-02-21",
-                overview="An animated series about the Avatar.",
-                media_type="tv",
-            ),
-        ]
-        mock_movie.return_value = []
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_search_prints_results(self, MockClient: MagicMock, capsys):
+        client = _mock_client(
+            search_tv=[
+                SearchResult(
+                    tmdb_id=246,
+                    name="Avatar",
+                    first_air_date="2005-02-21",
+                    overview="An animated series about the Avatar.",
+                    media_type="tv",
+                ),
+            ]
+        )
+        MockClient.return_value = client
         main(["search", "avatar"])
 
         out = capsys.readouterr().out
@@ -125,65 +149,65 @@ class TestSearchCommand:
 
 
 class TestEpisodesCommand:
-    @patch("tv_renamer.cli.get_episodes")
-    @patch("tv_renamer.cli.get_show")
-    def test_episodes_all_seasons(self, mock_show, mock_eps, capsys):
-        mock_show.return_value = ShowInfo(
-            tmdb_id=246,
-            name="Avatar",
-            first_air_date="2005-02-21",
-            seasons=[
-                SeasonSummary(season_number=1, episode_count=2, name="Book One"),
-                SeasonSummary(season_number=2, episode_count=1, name="Book Two"),
-            ],
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_episodes_all_seasons(self, MockClient: MagicMock, capsys):
+        client = _mock_client(
+            get_show=ShowInfo(
+                tmdb_id=246,
+                name="Avatar",
+                first_air_date="2005-02-21",
+                seasons=[
+                    SeasonSummary(season_number=1, episode_count=2, name="Book One"),
+                    SeasonSummary(season_number=2, episode_count=1, name="Book Two"),
+                ],
+            ),
         )
-        mock_eps.side_effect = [
+        client.get_episodes.side_effect = [
             [
                 Episode(season=1, episode=1, name="Pilot"),
                 Episode(season=1, episode=2, name="Second"),
             ],
             [Episode(season=2, episode=1, name="Premiere")],
         ]
-
+        MockClient.return_value = client
         main(["episodes", "246"])
 
-        assert mock_eps.call_count == 2
+        assert client.get_episodes.call_count == 2
         out = capsys.readouterr().out
         assert "Season 1" in out
         assert "Season 2" in out
 
-    @patch("tv_renamer.cli.get_episodes")
-    @patch("tv_renamer.cli.get_show")
-    def test_episodes_single_season(self, mock_show, mock_eps, capsys):
-        mock_show.return_value = ShowInfo(
-            tmdb_id=1,
-            name="Test",
-            first_air_date="2020-01-01",
-            seasons=[SeasonSummary(season_number=1, episode_count=1, name="S1")],
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_episodes_single_season(self, MockClient: MagicMock, capsys):
+        client = _mock_client(
+            get_show=ShowInfo(
+                tmdb_id=1,
+                name="Test",
+                first_air_date="2020-01-01",
+                seasons=[SeasonSummary(season_number=1, episode_count=1, name="S1")],
+            ),
         )
-        mock_eps.return_value = [Episode(season=1, episode=1, name="Pilot")]
-
+        client.get_episodes.return_value = [Episode(season=1, episode=1, name="Pilot")]
+        MockClient.return_value = client
         main(["episodes", "1", "--season", "1"])
 
-        mock_eps.assert_called_once_with(1, 1)
+        client.get_episodes.assert_called_once_with(1, 1)
 
 
 class TestRenameCommand:
-    @patch("tv_renamer.cli.get_episodes")
-    @patch("tv_renamer.cli.get_show")
-    def test_rename_dry_run(self, mock_show, mock_eps, tmp_path: Path, capsys):
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_rename_dry_run(self, MockClient: MagicMock, tmp_path: Path, capsys):
         src = tmp_path / "source"
         src.mkdir()
         (src / "S01E01 - Pilot.mp4").write_text("data")
 
-        mock_show.return_value = ShowInfo(
-            tmdb_id=99999,
-            name="Test Show",
-            first_air_date="2020-01-01",
-            seasons=[],
+        client = _mock_client(
+            get_show=ShowInfo(
+                tmdb_id=99999, name="Test Show", first_air_date="2020-01-01", seasons=[]
+            ),
+            get_episodes=[Episode(season=1, episode=1, name="Pilot")],
         )
-        mock_eps.return_value = [Episode(season=1, episode=1, name="Pilot")]
-
+        MockClient.return_value = client
         main(["rename", str(src), "--id", "99999", "--season", "1", "--dry-run"])
 
         out = capsys.readouterr().out
@@ -191,63 +215,55 @@ class TestRenameCommand:
         assert "would be renamed" in out
         assert (src / "S01E01 - Pilot.mp4").exists()
 
-    @patch("tv_renamer.cli.get_episodes")
-    @patch("tv_renamer.cli.get_show")
-    def test_rename_executes(self, mock_show, mock_eps, tmp_path: Path, capsys):
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_rename_executes(self, MockClient: MagicMock, tmp_path: Path, capsys):
         src = tmp_path / "source"
         src.mkdir()
         (src / "S01E01.mp4").write_text("data")
 
-        mock_show.return_value = ShowInfo(
-            tmdb_id=99999,
-            name="Test Show",
-            first_air_date="2020-01-01",
-            seasons=[],
+        client = _mock_client(
+            get_show=ShowInfo(
+                tmdb_id=99999, name="Test Show", first_air_date="2020-01-01", seasons=[]
+            ),
+            get_episodes=[Episode(season=1, episode=1, name="Pilot")],
         )
-        mock_eps.return_value = [Episode(season=1, episode=1, name="Pilot")]
-
+        MockClient.return_value = client
         main(["rename", str(src), "--id", "99999", "--season", "1"])
 
         out = capsys.readouterr().out
         assert "1 files renamed" in out
         assert not (src / "S01E01.mp4").exists()
 
-    @patch("tv_renamer.cli.get_episodes")
-    @patch("tv_renamer.cli.get_show")
-    def test_rename_no_matches(self, mock_show, mock_eps, tmp_path: Path, capsys):
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_rename_no_matches(self, MockClient: MagicMock, tmp_path: Path, capsys):
         src = tmp_path / "source"
         src.mkdir()
         (src / "random.mkv").touch()
 
-        mock_show.return_value = ShowInfo(
-            tmdb_id=1,
-            name="Show",
-            first_air_date="2020-01-01",
-            seasons=[],
+        client = _mock_client(
+            get_show=ShowInfo(tmdb_id=1, name="Show", first_air_date="2020-01-01", seasons=[]),
+            get_episodes=[Episode(season=1, episode=1, name="Pilot")],
         )
-        mock_eps.return_value = [Episode(season=1, episode=1, name="Pilot")]
-
+        MockClient.return_value = client
         main(["rename", str(src), "--id", "1", "--season", "1"])
 
         out = capsys.readouterr().out
         assert "No files matched" in out
 
-    @patch("tv_renamer.cli.get_episodes")
-    @patch("tv_renamer.cli.get_show")
-    def test_rename_collisions_exit_nonzero(self, mock_show, mock_eps, tmp_path: Path, capsys):
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_rename_collisions_exit_nonzero(self, MockClient: MagicMock, tmp_path: Path, capsys):
         src = tmp_path / "source"
         src.mkdir()
         (src / "S01E01.mkv").touch()
         (src / "01 - other rip.mkv").touch()
 
-        mock_show.return_value = ShowInfo(
-            tmdb_id=99999,
-            name="Test Show",
-            first_air_date="2020-01-01",
-            seasons=[],
+        client = _mock_client(
+            get_show=ShowInfo(
+                tmdb_id=99999, name="Test Show", first_air_date="2020-01-01", seasons=[]
+            ),
+            get_episodes=[Episode(season=1, episode=1, name="Pilot")],
         )
-        mock_eps.return_value = [Episode(season=1, episode=1, name="Pilot")]
-
+        MockClient.return_value = client
         with pytest.raises(SystemExit, match="1"):
             main(["rename", str(src), "--id", "99999", "--season", "1"])
 
@@ -256,24 +272,22 @@ class TestRenameCommand:
         assert (src / "S01E01.mkv").exists()
         assert (src / "01 - other rip.mkv").exists()
 
-    @patch("tv_renamer.cli.get_episodes")
-    @patch("tv_renamer.cli.get_show")
+    @patch("tv_renamer.cli.TMDBClient")
     def test_rename_collisions_dry_run_exit_nonzero(
-        self, mock_show, mock_eps, tmp_path: Path, capsys
+        self, MockClient: MagicMock, tmp_path: Path, capsys
     ):
         src = tmp_path / "source"
         src.mkdir()
         (src / "S01E01.mkv").touch()
         (src / "01 - other rip.mkv").touch()
 
-        mock_show.return_value = ShowInfo(
-            tmdb_id=99999,
-            name="Test Show",
-            first_air_date="2020-01-01",
-            seasons=[],
+        client = _mock_client(
+            get_show=ShowInfo(
+                tmdb_id=99999, name="Test Show", first_air_date="2020-01-01", seasons=[]
+            ),
+            get_episodes=[Episode(season=1, episode=1, name="Pilot")],
         )
-        mock_eps.return_value = [Episode(season=1, episode=1, name="Pilot")]
-
+        MockClient.return_value = client
         with pytest.raises(SystemExit, match="1"):
             main(["rename", str(src), "--id", "99999", "--season", "1", "--dry-run"])
 
@@ -283,7 +297,7 @@ class TestRenameCommand:
 
 class TestCopyCommand:
     @patch("tv_renamer.cli.copy_to_dest")
-    def test_copy_calls_copier(self, mock_copy, tmp_path: Path, capsys):
+    def test_copy_calls_copier(self, mock_copy: MagicMock, tmp_path: Path, capsys):
         src = tmp_path / "source"
         src.mkdir()
         dest = tmp_path / "dest"
@@ -293,7 +307,7 @@ class TestCopyCommand:
         mock_copy.assert_called_once_with(src, dest, dry_run=False)
 
     @patch("tv_renamer.cli.copy_to_dest")
-    def test_copy_dry_run(self, mock_copy, tmp_path: Path, capsys):
+    def test_copy_dry_run(self, mock_copy: MagicMock, tmp_path: Path, capsys):
         src = tmp_path / "source"
         src.mkdir()
         dest = tmp_path / "dest"

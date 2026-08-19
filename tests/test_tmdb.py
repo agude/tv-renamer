@@ -163,14 +163,14 @@ class TestRateLimiting:
 
 
 class TestApiKey:
-    def test_missing_api_key_raises(self):
-        with patch.dict("os.environ", {}, clear=True):
-            client = TMDBClient()
-            client._session.get = MagicMock()
-            with pytest.raises(RuntimeError, match="TMDB_API_KEY"):
-                client.search_tv("test")
+    def test_missing_api_key_raises_at_construction(self):
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            pytest.raises(RuntimeError, match="TMDB_API_KEY"),
+        ):
+            TMDBClient()
 
-    def test_api_key_passed_as_param(self, client: TMDBClient):
+    def test_api_key_from_env(self, client: TMDBClient):
         client._session.get = MagicMock(return_value=_mock_response({"results": []}))
 
         client.search_tv("test")
@@ -178,14 +178,11 @@ class TestApiKey:
         params = client._session.get.call_args[1]["params"]
         assert params["api_key"] == "fake-key"
 
+    def test_api_key_from_argument(self):
+        client = TMDBClient(api_key="explicit-key")
+        client._session.get = MagicMock(return_value=_mock_response({"results": []}))
 
-class TestModuleFunctions:
-    def test_module_functions_use_shared_client(self):
-        import tv_renamer.tmdb as tmdb_mod
+        client.search_tv("test")
 
-        with patch.dict("os.environ", {"TMDB_API_KEY": "fake-key"}):
-            tmdb_mod._client = None
-            c1 = tmdb_mod._get_client()
-            c2 = tmdb_mod._get_client()
-            assert c1 is c2
-            tmdb_mod._client = None
+        params = client._session.get.call_args[1]["params"]
+        assert params["api_key"] == "explicit-key"

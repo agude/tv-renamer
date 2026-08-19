@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from tv_renamer.copier import copy_to_dest
 from tv_renamer.renamer import execute_renames, parse_log, plan_renames, undo_renames
 from tv_renamer.scanner import scan_directory
-from tv_renamer.tmdb import get_episodes, get_show, search_movie, search_tv
+from tv_renamer.tmdb import TMDBClient
 
 
 def _cmd_scan(args: argparse.Namespace) -> None:
@@ -32,11 +32,12 @@ def _cmd_scan(args: argparse.Namespace) -> None:
 
 
 def _cmd_search(args: argparse.Namespace) -> None:
+    client: TMDBClient = args.client
     query = args.query
     media_type: str = args.type
 
     if media_type in ("tv", "both"):
-        results = search_tv(query)
+        results = client.search_tv(query)
         if results:
             print("\n  TV Shows:")
             for r in results[:10]:
@@ -45,7 +46,7 @@ def _cmd_search(args: argparse.Namespace) -> None:
                     print(f"      {r.overview[:120]}")
 
     if media_type in ("movie", "both"):
-        results = search_movie(query)
+        results = client.search_movie(query)
         if results:
             print("\n  Movies:")
             for r in results[:10]:
@@ -55,8 +56,9 @@ def _cmd_search(args: argparse.Namespace) -> None:
 
 
 def _cmd_episodes(args: argparse.Namespace) -> None:
+    client: TMDBClient = args.client
     tmdb_id: int = args.id
-    show = get_show(tmdb_id)
+    show = client.get_show(tmdb_id)
     print(f"\n  {show.name} ({show.year})")
 
     if args.season is not None:
@@ -65,13 +67,14 @@ def _cmd_episodes(args: argparse.Namespace) -> None:
         seasons_to_show = [s.season_number for s in show.seasons]
 
     for sn in seasons_to_show:
-        episodes = get_episodes(tmdb_id, sn)
+        episodes = client.get_episodes(tmdb_id, sn)
         print(f"\n  Season {sn} ({len(episodes)} episodes):")
         for ep in episodes:
             print(f"    S{ep.season:02d}E{ep.episode:02d} - {ep.name}")
 
 
 def _cmd_rename(args: argparse.Namespace) -> None:
+    client: TMDBClient = args.client
     tmdb_id: int = args.id
     directory = Path(args.directory)
     dry_run: bool = args.dry_run
@@ -79,15 +82,15 @@ def _cmd_rename(args: argparse.Namespace) -> None:
     log_path = Path(args.log) if args.log else None
     output = Path(args.output) if args.output else None
 
-    show = get_show(tmdb_id)
+    show = client.get_show(tmdb_id)
     print(f"\n  Show: {show.name} ({show.year})")
 
     if season_override is not None:
-        all_episodes = get_episodes(tmdb_id, season_override)
+        all_episodes = client.get_episodes(tmdb_id, season_override)
     else:
         all_episodes = []
         for s in show.seasons:
-            all_episodes.extend(get_episodes(tmdb_id, s.season_number))
+            all_episodes.extend(client.get_episodes(tmdb_id, s.season_number))
 
     plan = plan_renames(
         directory,
@@ -203,13 +206,13 @@ def main(argv: list[str] | None = None) -> None:
         default="both",
         help="Search type (default: both)",
     )
-    p_search.set_defaults(func=_cmd_search)
+    p_search.set_defaults(func=_cmd_search, needs_client=True)
 
     # episodes
     p_ep = sub.add_parser("episodes", help="List episodes for a TMDB show")
     p_ep.add_argument("id", type=int, help="TMDB show ID")
     p_ep.add_argument("--season", type=int, default=None, help="Season number")
-    p_ep.set_defaults(func=_cmd_episodes)
+    p_ep.set_defaults(func=_cmd_episodes, needs_client=True)
 
     # rename
     p_rename = sub.add_parser("rename", help="Rename episodes to Jellyfin format")
@@ -219,7 +222,7 @@ def main(argv: list[str] | None = None) -> None:
     p_rename.add_argument("--output", default=None, help="Output root directory")
     p_rename.add_argument("--dry-run", action="store_true", help="Preview without renaming")
     p_rename.add_argument("--log", default=None, help="Log file path")
-    p_rename.set_defaults(func=_cmd_rename)
+    p_rename.set_defaults(func=_cmd_rename, needs_client=True)
 
     # undo
     p_undo = sub.add_parser("undo", help="Reverse a logged rename batch")
@@ -235,6 +238,8 @@ def main(argv: list[str] | None = None) -> None:
     p_copy.set_defaults(func=_cmd_copy)
 
     args = parser.parse_args(argv)
+    if getattr(args, "needs_client", False):
+        args.client = TMDBClient()
     args.func(args)
 
 

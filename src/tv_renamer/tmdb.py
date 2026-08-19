@@ -13,13 +13,6 @@ USER_AGENT = "tv-renamer/0.1 (alex.public.account@gmail.com)"
 RATE_LIMIT_SECS = 0.25
 
 
-def _api_key() -> str:
-    key = os.environ.get("TMDB_API_KEY", "")
-    if not key:
-        raise RuntimeError("TMDB_API_KEY environment variable is not set")
-    return key
-
-
 @dataclass(frozen=True)
 class SearchResult:
     tmdb_id: int
@@ -62,7 +55,11 @@ class SeasonSummary:
 class TMDBClient:
     """TMDB API client with rate limiting and session reuse."""
 
-    def __init__(self) -> None:
+    def __init__(self, api_key: str | None = None) -> None:
+        key = api_key or os.environ.get("TMDB_API_KEY", "")
+        if not key:
+            raise RuntimeError("TMDB_API_KEY environment variable is not set")
+        self._api_key = key
         self._session = requests.Session()
         self._session.headers["User-Agent"] = USER_AGENT
         self._session.headers["Accept"] = "application/json"
@@ -78,7 +75,7 @@ class TMDBClient:
         self._rate_limit()
         resp = self._session.get(
             f"{BASE_URL}{path}",
-            params={"api_key": _api_key(), **params},
+            params={"api_key": self._api_key, **params},
             timeout=10,
         )
         resp.raise_for_status()
@@ -137,30 +134,3 @@ class TMDBClient:
             )
             for ep in data.get("episodes", [])
         ]
-
-
-# Module-level convenience functions using a shared client instance.
-_client: TMDBClient | None = None
-
-
-def _get_client() -> TMDBClient:
-    global _client
-    if _client is None:
-        _client = TMDBClient()
-    return _client
-
-
-def search_tv(query: str) -> list[SearchResult]:
-    return _get_client().search_tv(query)
-
-
-def search_movie(query: str) -> list[SearchResult]:
-    return _get_client().search_movie(query)
-
-
-def get_show(tmdb_id: int) -> ShowInfo:
-    return _get_client().get_show(tmdb_id)
-
-
-def get_episodes(tmdb_id: int, season: int) -> list[Episode]:
-    return _get_client().get_episodes(tmdb_id, season)
