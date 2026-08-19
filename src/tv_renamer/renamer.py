@@ -27,8 +27,9 @@ class RenamePlan:
     missing_episodes: list[tuple[int, int]] = field(default_factory=list)
 
 
-# Characters illegal in filenames on most filesystems.
-_UNSAFE = re.compile(r'[<>:"/\\|?*]')
+_REPLACE_WITH_DASH = re.compile(r"[/:]")
+_DELETE = re.compile(r'[<>"\\|?*]')
+_MULTI_SPACE = re.compile(r" {2,}")
 
 _NFO_TEMPLATE = """\
 <?xml version="1.0" encoding="UTF-8"?>
@@ -38,9 +39,34 @@ _NFO_TEMPLATE = """\
 </tvshow>
 """
 
+_MAX_FILENAME_BYTES = 255
+
 
 def _safe_name(name: str) -> str:
-    return _UNSAFE.sub("", name).strip()
+    name = _REPLACE_WITH_DASH.sub(" - ", name)
+    name = _DELETE.sub("", name)
+    name = _MULTI_SPACE.sub(" ", name)
+    return name.strip().rstrip(". ")
+
+
+def _truncate_filename(filename: str) -> str:
+    """Truncate a filename to fit within 255 UTF-8 bytes, preserving the extension."""
+    encoded = filename.encode("utf-8")
+    if len(encoded) <= _MAX_FILENAME_BYTES:
+        return filename
+
+    stem, _, ext = filename.rpartition(".")
+    if not stem:
+        stem = ext
+        ext = ""
+    else:
+        ext = "." + ext
+
+    ext_bytes = len(ext.encode("utf-8"))
+    budget = _MAX_FILENAME_BYTES - ext_bytes
+
+    truncated = stem.encode("utf-8")[:budget].decode("utf-8", errors="ignore").rstrip()
+    return truncated + ext
 
 
 def show_dir_name(show_name: str, year: str, tmdb_id: int) -> str:
@@ -114,13 +140,13 @@ def plan_renames(
                 continue
             titles = " & ".join(_safe_name(ep.name) for ep in eps if ep is not None)
             ep_tag = f"S{season:02d}E{fm.episode:02d}-E{fm.episode_end:02d}"
-            new_name = f"{safe_show} - {ep_tag} - {titles}{fm.path.suffix}"
+            new_name = _truncate_filename(f"{safe_show} - {ep_tag} - {titles}{fm.path.suffix}")
         else:
             key = (season, fm.episode)
             ep = ep_by_num.get(key)
             if ep is not None:
                 ep_title = _safe_name(ep.name)
-                new_name = (
+                new_name = _truncate_filename(
                     f"{safe_show} - S{season:02d}E{fm.episode:02d} - {ep_title}{fm.path.suffix}"
                 )
             else:

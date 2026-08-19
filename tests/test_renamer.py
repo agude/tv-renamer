@@ -9,6 +9,7 @@ import pytest
 from tv_renamer.renamer import (
     RenamePlan,
     _safe_name,
+    _truncate_filename,
     execute_renames,
     parse_log,
     plan_renames,
@@ -369,8 +370,11 @@ class TestWriteNfoXmlEscape:
 
 
 class TestSafeName:
-    def test_removes_colon(self):
-        assert _safe_name("Show: Test") == "Show Test"
+    def test_colon_becomes_dash(self):
+        assert _safe_name("Show: Test") == "Show - Test"
+
+    def test_slash_becomes_dash(self):
+        assert _safe_name("9/11") == "9 - 11"
 
     def test_removes_quotes(self):
         assert _safe_name('The "Best" Show') == "The Best Show"
@@ -379,7 +383,7 @@ class TestSafeName:
         assert _safe_name("Who?") == "Who"
 
     def test_removes_multiple_unsafe(self):
-        assert _safe_name('A:B<C>D"E') == "ABCDE"
+        assert _safe_name('A:B<C>D"E') == "A - BCDE"
 
     def test_strips_whitespace(self):
         assert _safe_name("  Show  ") == "Show"
@@ -388,10 +392,77 @@ class TestSafeName:
         assert _safe_name("Perfectly Normal Name") == "Perfectly Normal Name"
 
     def test_empty_after_stripping(self):
-        assert _safe_name(':::"""') == ""
+        assert _safe_name('"""') == ""
 
     def test_unicode_preserved(self):
         assert _safe_name("死神粤语") == "死神粤语"
+
+    def test_no_trailing_dots(self):
+        assert _safe_name("Name...") == "Name"
+
+    def test_no_trailing_space_after_dot_strip(self):
+        assert _safe_name("Name . ") == "Name"
+
+    def test_no_double_spaces(self):
+        assert _safe_name("A  B   C") == "A B C"
+
+    def test_colon_at_boundary_collapses(self):
+        assert _safe_name("Show: :Test") == "Show - - Test"
+
+
+class TestTruncateFilename:
+    def test_short_name_unchanged(self):
+        assert _truncate_filename("Short Name.mkv") == "Short Name.mkv"
+
+    def test_long_ascii_truncated(self):
+        stem = "A" * 300
+        result = _truncate_filename(f"{stem}.mkv")
+        assert len(result.encode("utf-8")) <= 255
+        assert result.endswith(".mkv")
+
+    def test_long_cjk_truncated(self):
+        stem = "\u6b7b\u795e" * 100
+        result = _truncate_filename(f"{stem}.mkv")
+        assert len(result.encode("utf-8")) <= 255
+        assert result.endswith(".mkv")
+
+    def test_extension_preserved(self):
+        stem = "X" * 300
+        result = _truncate_filename(f"{stem}.ts")
+        assert result.endswith(".ts")
+
+    def test_exactly_255_bytes_unchanged(self):
+        stem = "A" * 251
+        filename = f"{stem}.mkv"
+        assert len(filename.encode("utf-8")) == 255
+        assert _truncate_filename(filename) == filename
+
+
+class TestSafeNameInvariants:
+    _UNSAFE_CHARS: frozenset[str] = frozenset('<>"\\|?*/:')
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "Normal Title",
+            "9/11: The Day",
+            'Show "Special" Edition',
+            "Who? What? Where?",
+            "A" * 500,
+            "\u6b7b\u795e\u7ca4\u8bed" * 80,
+            "  lots   of   spaces  ",
+            "trailing...",
+            "mixed: /slashes/ and <angles>",
+            "",
+        ],
+    )
+    def test_invariants(self, name: str):
+        result = _safe_name(name)
+        for ch in self._UNSAFE_CHARS:
+            assert ch not in result, f"Unsafe char {ch!r} found in {result!r}"
+        assert not result.endswith(".")
+        assert not result.endswith(" ")
+        assert "  " not in result
 
 
 class TestUndo:
