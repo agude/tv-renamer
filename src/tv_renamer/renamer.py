@@ -76,6 +76,10 @@ def plan_renames(
     for e in episodes:
         ep_by_num[(e.season, e.episode)] = e
 
+    max_ep_per_season: dict[int, int] = {}
+    for s, ep_num in ep_by_num:
+        max_ep_per_season[s] = max(max_ep_per_season.get(s, 0), ep_num)
+
     matches = match_files(directory)
     ops: list[RenameOp] = []
     unmatched: list[Path] = []
@@ -93,6 +97,14 @@ def plan_renames(
             if season_override is not None
             else (fm.season if fm.season is not None else 1)
         )
+
+        if (
+            fm.pattern is not None
+            and fm.pattern.startswith("bare")
+            and fm.episode > max_ep_per_season.get(season, 0)
+        ):
+            unmatched.append(fm.path)
+            continue
 
         if fm.episode_end is not None:
             ep_range = list(range(fm.episode, fm.episode_end + 1))

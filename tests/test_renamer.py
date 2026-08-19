@@ -514,6 +514,45 @@ class TestShowDirName:
         assert "[tmdbid-1]" in result
 
 
+class TestBareNumberBounding:
+    def test_bare_number_exceeding_tmdb_count_is_unmatched(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "Show.name.2020.mkv").touch()
+
+        episodes = _make_episodes(1, 20)
+        plan = plan_renames(
+            src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes, season_override=1
+        )
+
+        assert len(plan.ops) == 0
+        assert len(plan.unmatched) == 1
+
+    def test_bare_number_within_range_still_matches(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "01 - Title.mp4").touch()
+
+        episodes = _make_episodes(1, 20)
+        plan = plan_renames(
+            src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes, season_override=1
+        )
+
+        assert len(plan.ops) == 1
+        assert "S01E01" in plan.ops[0].dest.name
+
+    def test_explicit_sxxexx_not_bounded(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "S01E2020.mkv").touch()
+
+        episodes = _make_episodes(1, 20)
+        plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+
+        assert len(plan.ops) == 1
+        assert "S01E2020" in plan.ops[0].dest.name
+
+
 class TestPlanRenamesMultiEpisode:
     def test_multi_episode_naming(self, tmp_path: Path):
         src = tmp_path / "source"

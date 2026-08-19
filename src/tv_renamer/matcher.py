@@ -15,6 +15,7 @@ class FileMatch:
     season: int | None
     episode: int | None
     episode_end: int | None = None
+    pattern: str | None = None
 
     @property
     def matched(self) -> bool:
@@ -41,38 +42,39 @@ _BARE_TRAILING = re.compile(r"(?<!\d)(\d{1,4})$")
 
 def extract_episode(
     filename: str,
-) -> tuple[int | None, int | None, int | None]:
-    """Return (season, episode, episode_end) parsed from a filename.
+) -> tuple[int | None, int | None, int | None, str | None]:
+    """Return (season, episode, episode_end, pattern) parsed from a filename.
 
     episode_end is set for multi-episode files (e.g. S01E01-E02).
-    Returns (None, None, None) if no pattern matches.
+    pattern identifies which regex matched (bare_leading, bare_trailing, etc.).
+    Returns (None, None, None, None) if no pattern matches.
     """
     m = _MULTI_EP.search(filename)
     if m:
-        return int(m.group(1)), int(m.group(2)), int(m.group(3))
+        return int(m.group(1)), int(m.group(2)), int(m.group(3)), "multi"
 
-    for _name, pattern in _PATTERNS:
-        m = pattern.search(filename)
+    for name, pat in _PATTERNS:
+        m = pat.search(filename)
         if m:
             season_num, ep_num = int(m.group(1)), int(m.group(2))
-            if _name == "XxXX" and ep_num in _RESOLUTION_HEIGHTS:
+            if name == "XxXX" and ep_num in _RESOLUTION_HEIGHTS:
                 continue
-            return season_num, ep_num, None
+            return season_num, ep_num, None, name
 
     m = _BARE_LEADING.match(filename)
     if m:
         num = int(m.group(1))
         if num > 0:
-            return None, num, None
+            return None, num, None, "bare_leading"
 
     stem = Path(filename).stem
     m = _BARE_TRAILING.search(stem)
     if m:
         candidate = int(m.group(1))
         if candidate > 0:
-            return None, candidate, None
+            return None, candidate, None, "bare_trailing"
 
-    return None, None, None
+    return None, None, None, None
 
 
 def match_files(directory: Path) -> list[FileMatch]:
@@ -80,8 +82,14 @@ def match_files(directory: Path) -> list[FileMatch]:
     results: list[FileMatch] = []
     for f in sorted(directory.iterdir()):
         if f.is_file() and f.suffix.lower() in MEDIA_EXTENSIONS:
-            season, episode, episode_end = extract_episode(f.name)
+            season, episode, episode_end, pattern = extract_episode(f.name)
             results.append(
-                FileMatch(path=f, season=season, episode=episode, episode_end=episode_end)
+                FileMatch(
+                    path=f,
+                    season=season,
+                    episode=episode,
+                    episode_end=episode_end,
+                    pattern=pattern,
+                )
             )
     return results
