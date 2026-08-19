@@ -77,5 +77,4 @@ disallow_untyped_calls = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Coverage gate at 60% during scaffolding; will ratchet up as more tests land.
-addopts = "--cov=tv_renamer --cov-fail-under=60"
+addopts = "--cov=tv_renamer --cov-fail-under=90"

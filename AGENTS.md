@@ -117,8 +117,5 @@ Python package (see the project-standards skill, `references/python-package.md`)
 
 ## Known exceptions
 
-- **Coverage gate at 60%** during scaffolding. CLI and TMDB client are
-  exercised via live use rather than mocked tests. Will ratchet up as more
-  tests land.
 - **mypy scoped to src/ only.** mypy 2.3 regression prevents test overrides
   from suppressing `no-untyped-def` in strict mode.
