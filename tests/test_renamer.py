@@ -585,6 +585,14 @@ class TestShowDirName:
         assert "[tmdbid-1]" in result
 
 
+class TestPlanRenamesKeywordOnly:
+    def test_positional_args_raise_type_error(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        with pytest.raises(TypeError):
+            plan_renames(src, "Show", "2020", 1, [])
+
+
 class TestBareNumberBounding:
     def test_bare_number_exceeding_tmdb_count_is_unmatched(self, tmp_path: Path):
         src = tmp_path / "source"

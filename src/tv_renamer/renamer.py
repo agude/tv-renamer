@@ -76,6 +76,7 @@ def show_dir_name(show_name: str, year: str, tmdb_id: int) -> str:
 
 def plan_renames(
     directory: Path,
+    *,
     show_name: str,
     year: str,
     tmdb_id: int,
