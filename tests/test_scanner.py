@@ -55,3 +55,83 @@ def test_scan_mixed(tmp_path: Path):
     result = scan_directory(tmp_path)
     assert len(result.loose_files) == 1
     assert len(result.shows) == 1
+
+
+class TestSeasonFolderDetection:
+    def test_subs_not_season_folder(self, tmp_path: Path):
+        show = tmp_path / "Show"
+        subs = show / "Subs"
+        subs.mkdir(parents=True)
+        (subs / "eng.srt").touch()
+        (show / "S01E01.mkv").touch()
+
+        result = scan_directory(tmp_path)
+        assert not result.shows[0].has_season_folders
+
+    def test_sample_not_season_folder(self, tmp_path: Path):
+        show = tmp_path / "Show"
+        sample = show / "Sample"
+        sample.mkdir(parents=True)
+        (show / "S01E01.mkv").touch()
+
+        result = scan_directory(tmp_path)
+        assert not result.shows[0].has_season_folders
+
+    def test_screenshots_not_season_folder(self, tmp_path: Path):
+        show = tmp_path / "Show"
+        ss = show / "Screenshots"
+        ss.mkdir(parents=True)
+        (show / "S01E01.mkv").touch()
+
+        result = scan_directory(tmp_path)
+        assert not result.shows[0].has_season_folders
+
+    def test_season_1_recognized(self, tmp_path: Path):
+        show = tmp_path / "Show"
+        (show / "Season 1").mkdir(parents=True)
+
+        result = scan_directory(tmp_path)
+        assert result.shows[0].has_season_folders
+
+    def test_lowercase_season_recognized(self, tmp_path: Path):
+        show = tmp_path / "Show"
+        (show / "season 1").mkdir(parents=True)
+
+        result = scan_directory(tmp_path)
+        assert result.shows[0].has_season_folders
+
+    def test_s01_recognized(self, tmp_path: Path):
+        show = tmp_path / "Show"
+        (show / "S01").mkdir(parents=True)
+
+        result = scan_directory(tmp_path)
+        assert result.shows[0].has_season_folders
+
+    def test_specials_recognized(self, tmp_path: Path):
+        show = tmp_path / "Show"
+        (show / "Specials").mkdir(parents=True)
+
+        result = scan_directory(tmp_path)
+        assert result.shows[0].has_season_folders
+
+
+class TestDeepRecursion:
+    def test_nested_media_counted(self, tmp_path: Path):
+        show = tmp_path / "Show"
+        deep = show / "Season 1" / "extras" / "behind_the_scenes"
+        deep.mkdir(parents=True)
+        (deep / "ep01.mkv").touch()
+        (show / "Season 1" / "S01E01.mkv").touch()
+
+        result = scan_directory(tmp_path)
+        assert result.shows[0].episode_count == 2
+
+    def test_dotdir_skipped_in_show(self, tmp_path: Path):
+        show = tmp_path / "Show"
+        dotdir = show / ".hidden"
+        dotdir.mkdir(parents=True)
+        (dotdir / "secret.mkv").touch()
+        (show / "S01E01.mkv").touch()
+
+        result = scan_directory(tmp_path)
+        assert result.shows[0].episode_count == 1

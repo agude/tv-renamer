@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from tv_renamer.constants import MEDIA_EXTENSIONS
+
+_SEASON_DIR = re.compile(r"(season\s*\d+|s\d+|specials)", re.IGNORECASE)
 
 
 @dataclass
@@ -49,16 +52,17 @@ def scan_directory(root: Path) -> ScanResult:
 
 
 def _scan_show(show_dir: Path) -> ShowEntry:
-    """Scan a single show directory."""
+    """Scan a single show directory, recursing into subdirectories."""
     media_files: list[str] = []
     has_season_folders = False
 
     for entry in sorted(show_dir.iterdir()):
+        if entry.name.startswith("."):
+            continue
         if entry.is_dir():
-            subdir_name = entry.name.lower()
-            if subdir_name.startswith("s") or subdir_name.startswith("season"):
+            if _SEASON_DIR.fullmatch(entry.name):
                 has_season_folders = True
-            for f in entry.iterdir():
+            for f in entry.rglob("*"):
                 if f.is_file() and f.suffix.lower() in MEDIA_EXTENSIONS:
                     media_files.append(f.name)
         elif entry.is_file() and entry.suffix.lower() in MEDIA_EXTENSIONS:
