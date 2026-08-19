@@ -183,8 +183,14 @@ def _cmd_copy(args: argparse.Namespace) -> None:
     label = "[DRY RUN] " if dry_run else ""
     print(f"  {label}Copying {source} -> {dest}")
     result = copy_to_dest(source, dest, dry_run=dry_run)
-    if dry_run and result.stdout:
-        print(result.stdout)
+    if dry_run:
+        if result.dry_run_output:
+            print(result.dry_run_output)
+    elif result.verified:
+        print("  Verify: OK")
+    else:
+        print("  Verify: FAILED — differences detected after copy", file=sys.stderr)
+        sys.exit(1)
 
 
 def _http_message(exc: HTTPError) -> str:

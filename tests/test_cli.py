@@ -300,25 +300,49 @@ class TestRenameCommand:
 class TestCopyCommand:
     @patch("tv_renamer.cli.copy_to_dest")
     def test_copy_calls_copier(self, mock_copy: MagicMock, tmp_path: Path, capsys):
+        from tv_renamer.copier import CopyResult
+
         src = tmp_path / "source"
         src.mkdir()
         dest = tmp_path / "dest"
+        mock_copy.return_value = CopyResult(verified=True)
 
         main(["copy", str(src), "--dest", str(dest)])
 
         mock_copy.assert_called_once_with(src, dest, dry_run=False)
+        out = capsys.readouterr().out
+        assert "Verify: OK" in out
 
     @patch("tv_renamer.cli.copy_to_dest")
     def test_copy_dry_run(self, mock_copy: MagicMock, tmp_path: Path, capsys):
+        from tv_renamer.copier import CopyResult
+
         src = tmp_path / "source"
         src.mkdir()
         dest = tmp_path / "dest"
+        mock_copy.return_value = CopyResult(dry_run_output="would transfer\n")
 
         main(["copy", str(src), "--dest", str(dest), "--dry-run"])
 
         mock_copy.assert_called_once_with(src, dest, dry_run=True)
         out = capsys.readouterr().out
         assert "DRY RUN" in out
+        assert "would transfer" in out
+
+    @patch("tv_renamer.cli.copy_to_dest")
+    def test_copy_verify_failure_exits_nonzero(self, mock_copy: MagicMock, tmp_path: Path, capsys):
+        from tv_renamer.copier import CopyResult
+
+        src = tmp_path / "source"
+        src.mkdir()
+        dest = tmp_path / "dest"
+        mock_copy.return_value = CopyResult(verified=False)
+
+        with pytest.raises(SystemExit, match="1"):
+            main(["copy", str(src), "--dest", str(dest)])
+
+        err = capsys.readouterr().err
+        assert "FAILED" in err
 
 
 class TestErrorBoundary:
