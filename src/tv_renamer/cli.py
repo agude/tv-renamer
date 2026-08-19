@@ -93,6 +93,7 @@ def _cmd_rename(args: argparse.Namespace) -> None:
         directory,
         show_name=show.name,
         year=show.year,
+        tmdb_id=tmdb_id,
         episodes=all_episodes,
         output=output,
         season_override=season_override,
@@ -110,7 +111,12 @@ def _cmd_rename(args: argparse.Namespace) -> None:
     if dry_run:
         print(f"\n  {len(ops)} files would be renamed.")
     else:
-        count = execute_renames(ops, log_path=log_path)
+        count = execute_renames(
+            ops,
+            log_path=log_path,
+            show_name=show.name,
+            tmdb_id=tmdb_id,
+        )
         print(f"\n  {count} files renamed.")
 
 
