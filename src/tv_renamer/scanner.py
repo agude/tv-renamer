@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from tv_renamer.tmdb import MEDIA_EXTENSIONS
+from tv_renamer.constants import MEDIA_EXTENSIONS
 
 
 @dataclass

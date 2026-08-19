@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from tv_renamer.tmdb import MEDIA_EXTENSIONS
+from tv_renamer.constants import MEDIA_EXTENSIONS
 
 
 @dataclass(frozen=True)

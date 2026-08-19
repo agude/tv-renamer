@@ -12,20 +12,6 @@ BASE_URL = "https://api.themoviedb.org/3"
 USER_AGENT = "tv-renamer/0.1 (alex.public.account@gmail.com)"
 RATE_LIMIT_SECS = 0.25
 
-MEDIA_EXTENSIONS = frozenset(
-    {
-        ".mkv",
-        ".mp4",
-        ".avi",
-        ".ts",
-        ".m4v",
-        ".wmv",
-        ".flv",
-        ".mov",
-        ".webm",
-    }
-)
-
 
 def _api_key() -> str:
     key = os.environ.get("TMDB_API_KEY", "")
