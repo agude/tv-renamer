@@ -93,14 +93,26 @@ def plan_renames(
             if season_override is not None
             else (fm.season if fm.season is not None else 1)
         )
-        key = (season, fm.episode)
 
-        ep = ep_by_num.get(key)
-        if ep is not None:
-            ep_title = _safe_name(ep.name)
-            new_name = f"{safe_show} - S{season:02d}E{fm.episode:02d} - {ep_title}{fm.path.suffix}"
+        if fm.episode_end is not None:
+            ep_range = list(range(fm.episode, fm.episode_end + 1))
+            eps = [ep_by_num.get((season, e)) for e in ep_range]
+            if any(ep is None for ep in eps):
+                unmatched.append(fm.path)
+                continue
+            titles = " & ".join(_safe_name(ep.name) for ep in eps if ep is not None)
+            ep_tag = f"S{season:02d}E{fm.episode:02d}-E{fm.episode_end:02d}"
+            new_name = f"{safe_show} - {ep_tag} - {titles}{fm.path.suffix}"
         else:
-            new_name = f"{safe_show} - S{season:02d}E{fm.episode:02d}{fm.path.suffix}"
+            key = (season, fm.episode)
+            ep = ep_by_num.get(key)
+            if ep is not None:
+                ep_title = _safe_name(ep.name)
+                new_name = (
+                    f"{safe_show} - S{season:02d}E{fm.episode:02d} - {ep_title}{fm.path.suffix}"
+                )
+            else:
+                new_name = f"{safe_show} - S{season:02d}E{fm.episode:02d}{fm.path.suffix}"
 
         dest = out_root / dir_name / f"Season {season}" / new_name
         ops.append(RenameOp(source=fm.path, dest=dest))
@@ -110,7 +122,7 @@ def plan_renames(
         dest_sources[op.dest].append(op.source)
     collisions = {dest: srcs for dest, srcs in dest_sources.items() if len(srcs) > 1}
 
-    matched_keys = set()
+    matched_keys: set[tuple[int, int]] = set()
     for fm in matches:
         if fm.episode is not None:
             season = (
@@ -118,7 +130,11 @@ def plan_renames(
                 if season_override is not None
                 else (fm.season if fm.season is not None else 1)
             )
-            matched_keys.add((season, fm.episode))
+            if fm.episode_end is not None:
+                for ep_num in range(fm.episode, fm.episode_end + 1):
+                    matched_keys.add((season, ep_num))
+            else:
+                matched_keys.add((season, fm.episode))
     missing_episodes = sorted(k for k in ep_by_num if k not in matched_keys)
 
     return RenamePlan(

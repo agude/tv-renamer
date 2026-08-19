@@ -514,6 +514,43 @@ class TestShowDirName:
         assert "[tmdbid-1]" in result
 
 
+class TestPlanRenamesMultiEpisode:
+    def test_multi_episode_naming(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "Show - S01E01-E02.mkv").touch()
+
+        episodes = _make_episodes(1, 3)
+        plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+
+        assert len(plan.ops) == 1
+        assert "S01E01-E02" in plan.ops[0].dest.name
+        assert "Episode 1 & Episode 2" in plan.ops[0].dest.name
+
+    def test_multi_episode_counts_as_matched(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "S01E01-E02.mkv").touch()
+        (src / "S01E03.mkv").touch()
+
+        episodes = _make_episodes(1, 3)
+        plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+
+        assert len(plan.ops) == 2
+        assert len(plan.missing_episodes) == 0
+
+    def test_multi_episode_missing_endpoint_is_unmatched(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "S01E01-E02.mkv").touch()
+
+        episodes = _make_episodes(1, 1)
+        plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+
+        assert len(plan.ops) == 0
+        assert len(plan.unmatched) == 1
+
+
 class TestPlanRenamesMultiSeason:
     def test_multi_season_routing(self, tmp_path: Path):
         src = tmp_path / "source"
