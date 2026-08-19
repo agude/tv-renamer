@@ -187,3 +187,58 @@ def execute_renames(
     _flush_log(log_path, log_lines)
 
     return count
+
+
+@dataclass(frozen=True)
+class UndoPlan:
+    moves: list[RenameOp]
+    nfo_removals: list[Path]
+
+
+def parse_log(log_path: Path) -> UndoPlan:
+    """Parse a changes.log into an undo plan (reversed order)."""
+    moves: list[RenameOp] = []
+    nfo_removals: list[Path] = []
+
+    for line in log_path.read_text().splitlines():
+        if line.startswith("wrote "):
+            nfo_removals.append(Path(line.removeprefix("wrote ")))
+        elif " -> " in line:
+            src_str, dest_str = line.split(" -> ", 1)
+            moves.append(RenameOp(source=Path(dest_str), dest=Path(src_str)))
+
+    moves.reverse()
+    return UndoPlan(moves=moves, nfo_removals=nfo_removals)
+
+
+def undo_renames(plan: UndoPlan, *, dry_run: bool = False) -> int:
+    """Reverse a logged rename batch. Returns count of files restored."""
+    for op in plan.moves:
+        if not op.source.exists():
+            raise FileNotFoundError(f"Source no longer exists: {op.source}")
+        if op.dest.exists():
+            raise FileExistsError(f"Original location already occupied: {op.dest}")
+
+    if dry_run:
+        return len(plan.moves)
+
+    for nfo in plan.nfo_removals:
+        if nfo.exists():
+            nfo.unlink()
+
+    count = 0
+    for op in plan.moves:
+        op.dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(op.source), str(op.dest))
+        count += 1
+
+    dirs_to_prune: list[Path] = []
+    for op in plan.moves:
+        dirs_to_prune.append(op.source.parent)
+        dirs_to_prune.append(op.source.parent.parent)
+
+    for d in sorted(set(dirs_to_prune), key=lambda p: len(p.parts), reverse=True):
+        if d.is_dir() and not any(d.iterdir()):
+            d.rmdir()
+
+    return count

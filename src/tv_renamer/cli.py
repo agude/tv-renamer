@@ -9,7 +9,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from tv_renamer.copier import copy_to_dest
-from tv_renamer.renamer import execute_renames, plan_renames
+from tv_renamer.renamer import execute_renames, parse_log, plan_renames, undo_renames
 from tv_renamer.scanner import scan_directory
 from tv_renamer.tmdb import get_episodes, get_show, search_movie, search_tv
 
@@ -143,6 +143,33 @@ def _cmd_rename(args: argparse.Namespace) -> None:
         print(f"\n  {count} files renamed.")
 
 
+def _cmd_undo(args: argparse.Namespace) -> None:
+    log_path = Path(args.log)
+    dry_run: bool = args.dry_run
+
+    plan = parse_log(log_path)
+
+    if not plan.moves:
+        print("  Log contains no moves to undo.")
+        return
+
+    for op in plan.moves:
+        label = "[DRY RUN] " if dry_run else ""
+        print(f"  {label}{op.source.name}")
+        print(f"    -> {op.dest}")
+
+    for nfo in plan.nfo_removals:
+        label = "[DRY RUN] " if dry_run else ""
+        print(f"  {label}remove {nfo}")
+
+    count = undo_renames(plan, dry_run=dry_run)
+
+    if dry_run:
+        print(f"\n  {count} files would be restored.")
+    else:
+        print(f"\n  {count} files restored.")
+
+
 def _cmd_copy(args: argparse.Namespace) -> None:
     source = Path(args.source)
     dest = Path(args.dest)
@@ -193,6 +220,12 @@ def main(argv: list[str] | None = None) -> None:
     p_rename.add_argument("--dry-run", action="store_true", help="Preview without renaming")
     p_rename.add_argument("--log", default=None, help="Log file path")
     p_rename.set_defaults(func=_cmd_rename)
+
+    # undo
+    p_undo = sub.add_parser("undo", help="Reverse a logged rename batch")
+    p_undo.add_argument("--log", required=True, help="Log file from a rename run")
+    p_undo.add_argument("--dry-run", action="store_true", help="Preview without undoing")
+    p_undo.set_defaults(func=_cmd_undo)
 
     # copy
     p_copy = sub.add_parser("copy", help="Copy organized files to NAS")

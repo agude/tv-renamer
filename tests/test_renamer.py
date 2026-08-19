@@ -10,8 +10,10 @@ from tv_renamer.renamer import (
     RenamePlan,
     _safe_name,
     execute_renames,
+    parse_log,
     plan_renames,
     show_dir_name,
+    undo_renames,
     write_nfo,
 )
 from tv_renamer.tmdb import Episode
@@ -390,6 +392,71 @@ class TestSafeName:
 
     def test_unicode_preserved(self):
         assert _safe_name("死神粤语") == "死神粤语"
+
+
+class TestUndo:
+    def test_rename_then_undo_restores_tree(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "S01E01.mkv").write_text("ep1")
+        (src / "S01E02.mkv").write_text("ep2")
+
+        episodes = _make_episodes(1, 2)
+        plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+        log = tmp_path / "changes.log"
+        execute_renames(plan.ops, log_path=log, show_name="Show", tmdb_id=99999)
+
+        assert not (src / "S01E01.mkv").exists()
+
+        undo_plan = parse_log(log)
+        undo_renames(undo_plan)
+
+        assert (src / "S01E01.mkv").read_text() == "ep1"
+        assert (src / "S01E02.mkv").read_text() == "ep2"
+
+    def test_undo_removes_nfo_and_prunes_dirs(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "S01E01.mkv").write_text("data")
+
+        episodes = _make_episodes(1, 1)
+        plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+        log = tmp_path / "changes.log"
+        execute_renames(plan.ops, log_path=log, show_name="Show", tmdb_id=99999)
+
+        show_dir = plan.ops[0].dest.parent.parent
+        assert (show_dir / "tvshow.nfo").exists()
+
+        undo_plan = parse_log(log)
+        undo_renames(undo_plan)
+
+        assert not (show_dir / "tvshow.nfo").exists()
+        assert not show_dir.exists()
+
+    def test_undo_missing_destination_aborts(self, tmp_path: Path):
+        log = tmp_path / "changes.log"
+        log.write_text("/nonexistent/src.mkv -> /nonexistent/dest.mkv\n")
+
+        undo_plan = parse_log(log)
+        with pytest.raises(FileNotFoundError, match="no longer exists"):
+            undo_renames(undo_plan)
+
+    def test_undo_dry_run_no_changes(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "S01E01.mkv").write_text("data")
+
+        episodes = _make_episodes(1, 1)
+        plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+        log = tmp_path / "changes.log"
+        execute_renames(plan.ops, log_path=log, show_name="Show", tmdb_id=99999)
+
+        undo_plan = parse_log(log)
+        count = undo_renames(undo_plan, dry_run=True)
+
+        assert count == 1
+        assert plan.ops[0].dest.exists()
+        assert not (src / "S01E01.mkv").exists()
 
 
 class TestPlanRenamesSpecials:
