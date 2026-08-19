@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from xml.sax.saxutils import escape
 
 from tv_renamer.matcher import match_files
 from tv_renamer.tmdb import Episode
@@ -95,8 +96,10 @@ def plan_renames(
 
 def write_nfo(show_dir: Path, show_name: str, tmdb_id: int) -> Path:
     """Write a tvshow.nfo file into the show directory."""
+    if not isinstance(tmdb_id, int):
+        raise TypeError(f"tmdb_id must be int, got {type(tmdb_id).__name__}")
     nfo_path = show_dir / "tvshow.nfo"
-    nfo_path.write_text(_NFO_TEMPLATE.format(title=show_name, tmdb_id=tmdb_id))
+    nfo_path.write_text(_NFO_TEMPLATE.format(title=escape(show_name), tmdb_id=tmdb_id))
     return nfo_path
 
 

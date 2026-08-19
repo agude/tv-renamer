@@ -1,6 +1,9 @@
 """Tests for rename planning and execution."""
 
+import xml.etree.ElementTree as ET
 from pathlib import Path
+
+import pytest
 
 from tv_renamer.renamer import _safe_name, execute_renames, plan_renames, show_dir_name, write_nfo
 from tv_renamer.tmdb import Episode
@@ -133,6 +136,26 @@ def test_write_nfo(tmp_path: Path):
     content = nfo.read_text()
     assert "<tmdbid>246</tmdbid>" in content
     assert "<title>Avatar: The Last Airbender</title>" in content
+
+
+class TestWriteNfoXmlEscape:
+    @pytest.mark.parametrize(
+        "title",
+        [
+            "Tom & Jerry <Classic>",
+            "Show with <angle brackets>",
+            'Show with "double quotes"',
+            "Show with 'single quotes'",
+            "A & B & C",
+        ],
+    )
+    def test_xml_special_chars_produce_valid_xml(self, tmp_path: Path, title: str):
+        nfo = write_nfo(tmp_path, title, 42)
+        tree = ET.parse(nfo)
+        root = tree.getroot()
+        assert root.find("title") is not None
+        assert root.findtext("title") == title
+        assert root.findtext("tmdbid") == "42"
 
 
 class TestSafeName:
