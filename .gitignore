@@ -12,5 +12,8 @@ build/
 # Secrets
 .env
 
+# Run artifacts
+*.log
+
 # uv — .venv is local; uv.lock is committed (do not add it here)
 .venv/
