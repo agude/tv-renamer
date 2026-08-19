@@ -2,6 +2,7 @@
 
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -117,6 +118,39 @@ def test_execute_renames_with_log(tmp_path: Path):
 
     assert log.exists()
     assert "S01E01" in log.read_text()
+
+
+def test_execute_renames_partial_failure(tmp_path: Path):
+    src = tmp_path / "source"
+    src.mkdir()
+    files = []
+    for i in range(1, 6):
+        f = src / f"S01E{i:02d}.mkv"
+        f.write_text(f"data{i}")
+        files.append(f)
+
+    episodes = _make_episodes(1, 5)
+    ops = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+    log = tmp_path / "changes.log"
+
+    call_count = 0
+    original_move = __import__("shutil").move
+
+    def failing_move(s: str, d: str) -> None:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 3:
+            raise OSError("cross-device link")
+        original_move(s, d)
+
+    with (
+        patch("tv_renamer.renamer.shutil.move", side_effect=failing_move),
+        pytest.raises(OSError, match="S01E03"),
+    ):
+        execute_renames(ops, log_path=log)
+
+    log_text = log.read_text()
+    assert log_text.count(" -> ") == 2
 
 
 def test_no_match_files_skipped(tmp_path: Path):

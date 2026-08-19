@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from xml.sax.saxutils import escape
@@ -103,6 +104,12 @@ def write_nfo(show_dir: Path, show_name: str, tmdb_id: int) -> Path:
     return nfo_path
 
 
+def _flush_log(log_path: Path | None, lines: list[str]) -> None:
+    if log_path and lines:
+        with log_path.open("a") as f:
+            f.writelines(lines)
+
+
 def execute_renames(
     ops: list[RenameOp],
     *,
@@ -120,10 +127,16 @@ def execute_renames(
 
     for op in ops:
         op.dest.parent.mkdir(parents=True, exist_ok=True)
-        op.source.rename(op.dest)
+        try:
+            shutil.move(str(op.source), str(op.dest))
+        except OSError:
+            _flush_log(log_path, log_lines)
+            raise OSError(
+                f"Failed to move {op.source} -> {op.dest}; "
+                f"{count} of {len(ops)} files already moved"
+            ) from None
         log_lines.append(f"{op.source} -> {op.dest}\n")
         count += 1
-        # Track show-level directories (parent of Season N)
         show_dirs.add(op.dest.parent.parent)
 
     if show_name is not None and tmdb_id is not None:
@@ -131,8 +144,6 @@ def execute_renames(
             nfo = write_nfo(sd, show_name, tmdb_id)
             log_lines.append(f"wrote {nfo}\n")
 
-    if log_path and log_lines:
-        with log_path.open("a") as f:
-            f.writelines(log_lines)
+    _flush_log(log_path, log_lines)
 
     return count
