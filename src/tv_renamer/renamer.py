@@ -24,6 +24,7 @@ class RenamePlan:
     ops: list[RenameOp]
     unmatched: list[Path]
     collisions: dict[Path, list[Path]] = field(default_factory=dict)
+    missing_episodes: list[tuple[int, int]] = field(default_factory=list)
 
 
 # Characters illegal in filenames on most filesystems.
@@ -109,7 +110,23 @@ def plan_renames(
         dest_sources[op.dest].append(op.source)
     collisions = {dest: srcs for dest, srcs in dest_sources.items() if len(srcs) > 1}
 
-    return RenamePlan(ops=ops, unmatched=unmatched, collisions=collisions)
+    matched_keys = set()
+    for fm in matches:
+        if fm.episode is not None:
+            season = (
+                season_override
+                if season_override is not None
+                else (fm.season if fm.season is not None else 1)
+            )
+            matched_keys.add((season, fm.episode))
+    missing_episodes = sorted(k for k in ep_by_num if k not in matched_keys)
+
+    return RenamePlan(
+        ops=ops,
+        unmatched=unmatched,
+        collisions=collisions,
+        missing_episodes=missing_episodes,
+    )
 
 
 def write_nfo(show_dir: Path, show_name: str, tmdb_id: int) -> Path:

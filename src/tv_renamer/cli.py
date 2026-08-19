@@ -126,6 +126,11 @@ def _cmd_rename(args: argparse.Namespace) -> None:
         for p in plan.unmatched:
             print(f"    {p.name}")
 
+    if plan.missing_episodes:
+        ep_list = ", ".join(f"S{s:02d}E{e:02d}" for s, e in plan.missing_episodes)
+        total = len(plan.ops) + len(plan.missing_episodes)
+        print(f"\n  Matched {len(plan.ops)}/{total} episodes; missing {ep_list}")
+
     if dry_run:
         print(f"\n  {len(plan.ops)} files would be renamed.")
     else:

@@ -254,6 +254,53 @@ class TestRenamePlanUnmatched:
         assert isinstance(plan.unmatched, list)
 
 
+class TestRenamePlanMissingEpisodes:
+    def test_missing_episodes_reported(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "S01E01.mkv").touch()
+        (src / "S01E03.mkv").touch()
+
+        episodes = _make_episodes(1, 3)
+        plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+
+        assert len(plan.ops) == 2
+        assert (1, 2) in plan.missing_episodes
+
+    def test_full_coverage_no_missing(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "S01E01.mkv").touch()
+        (src / "S01E02.mkv").touch()
+
+        episodes = _make_episodes(1, 2)
+        plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+
+        assert len(plan.missing_episodes) == 0
+
+    def test_season_override_restricts_comparison(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "01.mkv").touch()
+
+        episodes = [
+            Episode(season=2, episode=1, name="First"),
+            Episode(season=2, episode=2, name="Second"),
+        ]
+        plan = plan_renames(
+            src,
+            show_name="Show",
+            year="2020",
+            tmdb_id=99999,
+            episodes=episodes,
+            season_override=2,
+        )
+
+        assert len(plan.ops) == 1
+        assert (2, 2) in plan.missing_episodes
+        assert (2, 1) not in plan.missing_episodes
+
+
 class TestRenamePlanCollisions:
     def test_duplicate_destinations_detected(self, tmp_path: Path):
         src = tmp_path / "source"
