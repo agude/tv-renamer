@@ -126,6 +126,12 @@ def execute_renames(
     show_dirs: set[Path] = set()
 
     for op in ops:
+        if op.dest.exists():
+            _flush_log(log_path, log_lines)
+            raise FileExistsError(
+                f"Destination already exists: {op.source} -> {op.dest}; "
+                f"{count} of {len(ops)} files already moved"
+            )
         op.dest.parent.mkdir(parents=True, exist_ok=True)
         try:
             shutil.move(str(op.source), str(op.dest))

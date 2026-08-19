@@ -153,6 +153,43 @@ def test_execute_renames_partial_failure(tmp_path: Path):
     assert log_text.count(" -> ") == 2
 
 
+def test_execute_renames_refuses_overwrite(tmp_path: Path):
+    src = tmp_path / "source"
+    src.mkdir()
+    (src / "S01E01.mkv").write_text("original")
+
+    episodes = _make_episodes(1, 1)
+    ops = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+
+    ops[0].dest.parent.mkdir(parents=True, exist_ok=True)
+    ops[0].dest.write_text("existing")
+
+    with pytest.raises(FileExistsError, match="Destination already exists"):
+        execute_renames(ops)
+
+    assert (src / "S01E01.mkv").exists()
+    assert ops[0].dest.read_text() == "existing"
+
+
+def test_execute_renames_overwrite_aborts_whole_batch(tmp_path: Path):
+    src = tmp_path / "source"
+    src.mkdir()
+    (src / "S01E01.mkv").write_text("data1")
+    (src / "S01E02.mkv").write_text("data2")
+
+    episodes = _make_episodes(1, 2)
+    ops = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+
+    ops[0].dest.parent.mkdir(parents=True, exist_ok=True)
+    ops[0].dest.write_text("blocker")
+
+    with pytest.raises(FileExistsError):
+        execute_renames(ops)
+
+    assert (src / "S01E01.mkv").exists()
+    assert (src / "S01E02.mkv").exists()
+
+
 def test_no_match_files_skipped(tmp_path: Path):
     src = tmp_path / "source"
     src.mkdir()
