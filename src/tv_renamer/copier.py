@@ -1,4 +1,4 @@
-"""Rsync wrapper for verified transfer to the NAS."""
+"""Rsync wrapper for transfer to the NAS."""
 
 from __future__ import annotations
 
@@ -12,12 +12,11 @@ def copy_to_dest(
     *,
     dry_run: bool = False,
 ) -> subprocess.CompletedProcess[str]:
-    """Rsync source directory to destination with verification.
+    """Rsync source directory to destination.
 
-    Args:
-        source: Source directory to copy.
-        dest: Destination directory on the NAS.
-        dry_run: If True, pass --dry-run to rsync.
+    A real transfer streams rsync output to the terminal so --progress
+    is visible. A dry run captures stdout and returns it for the caller
+    to print. Raises subprocess.CalledProcessError on non-zero exit.
     """
     cmd: list[str] = [
         "rsync",
@@ -31,4 +30,4 @@ def copy_to_dest(
     src_str = str(source).rstrip("/") + "/"
     cmd.extend([src_str, str(dest)])
 
-    return subprocess.run(cmd, check=True, text=True, capture_output=not dry_run)
+    return subprocess.run(cmd, check=True, text=True, capture_output=dry_run)

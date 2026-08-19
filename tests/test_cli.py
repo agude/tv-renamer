@@ -1,5 +1,6 @@
 """Tests for CLI argument parsing and subcommand wiring."""
 
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -364,3 +365,16 @@ class TestErrorBoundary:
         assert ret == 1
         err = capsys.readouterr().err
         assert "no such TMDB id" in err
+
+    @patch("tv_renamer.cli.copy_to_dest")
+    def test_rsync_failure_exits_1(self, mock_copy: MagicMock, tmp_path: Path, capsys):
+        src = tmp_path / "source"
+        src.mkdir()
+        dest = tmp_path / "dest"
+        mock_copy.side_effect = subprocess.CalledProcessError(
+            23, "rsync", stderr="rsync: some error\n"
+        )
+        ret = main(["copy", str(src), "--dest", str(dest)])
+        assert ret == 1
+        err = capsys.readouterr().err
+        assert "rsync: some error" in err

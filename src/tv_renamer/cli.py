@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
 from pathlib import Path
 
@@ -181,7 +182,9 @@ def _cmd_copy(args: argparse.Namespace) -> None:
 
     label = "[DRY RUN] " if dry_run else ""
     print(f"  {label}Copying {source} -> {dest}")
-    copy_to_dest(source, dest, dry_run=dry_run)
+    result = copy_to_dest(source, dest, dry_run=dry_run)
+    if dry_run and result.stdout:
+        print(result.stdout)
 
 
 def _http_message(exc: HTTPError) -> str:
@@ -255,6 +258,10 @@ def main(argv: list[str] | None = None) -> int:
         args.func(args)
     except HTTPError as exc:
         print(f"error: {_http_message(exc)}", file=sys.stderr)
+        return 1
+    except subprocess.CalledProcessError as exc:
+        msg = exc.stderr.strip() if exc.stderr else f"rsync exited with status {exc.returncode}"
+        print(f"error: {msg}", file=sys.stderr)
         return 1
     except (OSError, RuntimeError) as exc:
         print(f"error: {exc}", file=sys.stderr)

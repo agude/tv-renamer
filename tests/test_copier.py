@@ -70,3 +70,25 @@ def test_copy_check_true(mock_run, tmp_path: Path):
     copy_to_dest(src, dest)
 
     assert mock_run.call_args[1]["check"] is True
+
+
+@patch("tv_renamer.copier.subprocess.run")
+def test_real_copy_streams_output(mock_run, tmp_path: Path):
+    src = tmp_path / "source"
+    src.mkdir()
+    dest = tmp_path / "dest"
+
+    copy_to_dest(src, dest)
+
+    assert mock_run.call_args[1]["capture_output"] is False
+
+
+@patch("tv_renamer.copier.subprocess.run")
+def test_dry_run_captures_output(mock_run, tmp_path: Path):
+    src = tmp_path / "source"
+    src.mkdir()
+    dest = tmp_path / "dest"
+
+    copy_to_dest(src, dest, dry_run=True)
+
+    assert mock_run.call_args[1]["capture_output"] is True
