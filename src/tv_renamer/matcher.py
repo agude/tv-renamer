@@ -26,8 +26,10 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     # [S01.E01]
     ("bracket", re.compile(r"\[S(\d{1,2})\.E(\d{1,4})\]", re.IGNORECASE)),
     # 1x01
-    ("XxXX", re.compile(r"(\d{1,2})x(\d{2,4})", re.IGNORECASE)),
+    ("XxXX", re.compile(r"(?<!\d)(\d{1,2})x(\d{2,4})(?!\d)", re.IGNORECASE)),
 ]
+
+_RESOLUTION_HEIGHTS = frozenset({480, 576, 720, 1080, 1440, 2160})
 
 # Bare number: leading ("01 - title.mp4") or trailing after non-digit chars ("死神粤语01.ts")
 _BARE_LEADING = re.compile(r"^(\d{1,4})")
@@ -42,7 +44,10 @@ def extract_episode(filename: str) -> tuple[int | None, int | None]:
     for _name, pattern in _PATTERNS:
         m = pattern.search(filename)
         if m:
-            return int(m.group(1)), int(m.group(2))
+            season_num, ep_num = int(m.group(1)), int(m.group(2))
+            if _name == "XxXX" and ep_num in _RESOLUTION_HEIGHTS:
+                continue
+            return season_num, ep_num
 
     m = _BARE_LEADING.match(filename)
     if m:

@@ -85,6 +85,23 @@ def test_match_files_unmatched_returns_false(tmp_path: Path):
 @pytest.mark.parametrize(
     "filename, expected",
     [
+        ("Show 1920x1080 BluRay.mkv", (None, None)),
+        ("Show 1280x720 BluRay.mkv", (None, None)),
+        ("Show 720x480 BluRay.mkv", (None, None)),
+        ("Show 1x01 Pilot.mp4", (1, 1)),
+        ("2x13 - Title.mkv", (2, 13)),
+        ("1x100 - Title.mp4", (1, 100)),
+    ],
+)
+def test_extract_episode_resolution_not_matched(
+    filename: str, expected: tuple[int | None, int | None]
+):
+    assert extract_episode(filename) == expected
+
+
+@pytest.mark.parametrize(
+    "filename, expected",
+    [
         ("ep12345.mkv", (None, None)),
         # Known false positive until commit 12 bounds bare numbers by episode count
         ("Show.name.2020.mkv", (None, 2020)),
