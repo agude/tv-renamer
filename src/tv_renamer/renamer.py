@@ -18,6 +18,12 @@ class RenameOp:
     dest: Path
 
 
+@dataclass(frozen=True)
+class RenamePlan:
+    ops: list[RenameOp]
+    unmatched: list[Path]
+
+
 # Characters illegal in filenames on most filesystems.
 _UNSAFE = re.compile(r'[<>:"/\\|?*]')
 
@@ -47,8 +53,8 @@ def plan_renames(
     episodes: list[Episode],
     output: Path | None = None,
     season_override: int | None = None,
-) -> list[RenameOp]:
-    """Build a list of rename operations without executing them.
+) -> RenamePlan:
+    """Build a rename plan with operations and unmatched files.
 
     Args:
         directory: Source directory containing media files.
@@ -69,11 +75,15 @@ def plan_renames(
 
     matches = match_files(directory)
     ops: list[RenameOp] = []
+    unmatched: list[Path] = []
 
     for fm in matches:
         if not fm.matched:
+            unmatched.append(fm.path)
             continue
-        assert fm.episode is not None
+        if fm.episode is None:
+            unmatched.append(fm.path)
+            continue
 
         season = (
             season_override
@@ -92,7 +102,7 @@ def plan_renames(
         dest = out_root / dir_name / f"Season {season}" / new_name
         ops.append(RenameOp(source=fm.path, dest=dest))
 
-    return ops
+    return RenamePlan(ops=ops, unmatched=unmatched)
 
 
 def write_nfo(show_dir: Path, show_name: str, tmdb_id: int) -> Path:

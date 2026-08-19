@@ -89,7 +89,7 @@ def _cmd_rename(args: argparse.Namespace) -> None:
         for s in show.seasons:
             all_episodes.extend(get_episodes(tmdb_id, s.season_number))
 
-    ops = plan_renames(
+    plan = plan_renames(
         directory,
         show_name=show.name,
         year=show.year,
@@ -99,20 +99,29 @@ def _cmd_rename(args: argparse.Namespace) -> None:
         season_override=season_override,
     )
 
-    if not ops:
+    if not plan.ops:
         print("  No files matched.")
+        if plan.unmatched:
+            print(f"\n  Unmatched ({len(plan.unmatched)}):")
+            for p in plan.unmatched:
+                print(f"    {p.name}")
         return
 
-    for op in ops:
+    for op in plan.ops:
         label = "[DRY RUN] " if dry_run else ""
         print(f"  {label}{op.source.name}")
         print(f"    -> {op.dest}")
 
+    if plan.unmatched:
+        print(f"\n  Unmatched ({len(plan.unmatched)}):")
+        for p in plan.unmatched:
+            print(f"    {p.name}")
+
     if dry_run:
-        print(f"\n  {len(ops)} files would be renamed.")
+        print(f"\n  {len(plan.ops)} files would be renamed.")
     else:
         count = execute_renames(
-            ops,
+            plan.ops,
             log_path=log_path,
             show_name=show.name,
             tmdb_id=tmdb_id,

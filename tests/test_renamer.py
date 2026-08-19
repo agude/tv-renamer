@@ -6,7 +6,14 @@ from unittest.mock import patch
 
 import pytest
 
-from tv_renamer.renamer import _safe_name, execute_renames, plan_renames, show_dir_name, write_nfo
+from tv_renamer.renamer import (
+    RenamePlan,
+    _safe_name,
+    execute_renames,
+    plan_renames,
+    show_dir_name,
+    write_nfo,
+)
 from tv_renamer.tmdb import Episode
 
 
@@ -21,12 +28,16 @@ def test_plan_renames_standard_format(tmp_path: Path):
     (src / "[S01.E02] Show - Second.mp4").touch()
 
     episodes = _make_episodes(1, 2)
-    ops = plan_renames(src, show_name="Test Show", year="2020", tmdb_id=99999, episodes=episodes)
+    plan = plan_renames(src, show_name="Test Show", year="2020", tmdb_id=99999, episodes=episodes)
 
-    assert len(ops) == 2
+    assert len(plan.ops) == 2
     show_dir = "Test Show (2020) [tmdbid-99999]"
-    assert ops[0].dest == tmp_path / show_dir / "Season 1" / "Test Show - S01E01 - Episode 1.mp4"
-    assert ops[1].dest == tmp_path / show_dir / "Season 1" / "Test Show - S01E02 - Episode 2.mp4"
+    assert (
+        plan.ops[0].dest == tmp_path / show_dir / "Season 1" / "Test Show - S01E01 - Episode 1.mp4"
+    )
+    assert (
+        plan.ops[1].dest == tmp_path / show_dir / "Season 1" / "Test Show - S01E02 - Episode 2.mp4"
+    )
 
 
 def test_plan_renames_bare_numbers(tmp_path: Path):
@@ -36,7 +47,7 @@ def test_plan_renames_bare_numbers(tmp_path: Path):
     (src / "02title.ts").touch()
 
     episodes = _make_episodes(1, 2)
-    ops = plan_renames(
+    plan = plan_renames(
         src,
         show_name="Show",
         year="2000",
@@ -45,9 +56,9 @@ def test_plan_renames_bare_numbers(tmp_path: Path):
         season_override=1,
     )
 
-    assert len(ops) == 2
-    assert "S01E01" in ops[0].dest.name
-    assert "S01E02" in ops[1].dest.name
+    assert len(plan.ops) == 2
+    assert "S01E01" in plan.ops[0].dest.name
+    assert "S01E02" in plan.ops[1].dest.name
 
 
 def test_plan_renames_unsafe_characters(tmp_path: Path):
@@ -56,10 +67,10 @@ def test_plan_renames_unsafe_characters(tmp_path: Path):
     (src / "S01E01.mp4").touch()
 
     episodes = [Episode(season=1, episode=1, name='What: The "Movie"?')]
-    ops = plan_renames(src, show_name="Show: Test", year="2020", tmdb_id=99999, episodes=episodes)
+    plan = plan_renames(src, show_name="Show: Test", year="2020", tmdb_id=99999, episodes=episodes)
 
-    assert ":" not in ops[0].dest.name
-    assert '"' not in ops[0].dest.name
+    assert ":" not in plan.ops[0].dest.name
+    assert '"' not in plan.ops[0].dest.name
 
 
 def test_plan_renames_missing_episode_title(tmp_path: Path):
@@ -68,10 +79,10 @@ def test_plan_renames_missing_episode_title(tmp_path: Path):
     (src / "S01E99.mp4").touch()
 
     episodes = _make_episodes(1, 2)
-    ops = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+    plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
 
-    assert len(ops) == 1
-    assert ops[0].dest.name == "Show - S01E99.mp4"
+    assert len(plan.ops) == 1
+    assert plan.ops[0].dest.name == "Show - S01E99.mp4"
 
 
 def test_plan_renames_custom_output(tmp_path: Path):
@@ -81,11 +92,11 @@ def test_plan_renames_custom_output(tmp_path: Path):
     (src / "S01E01.mkv").touch()
 
     episodes = _make_episodes(1, 1)
-    ops = plan_renames(
+    plan = plan_renames(
         src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes, output=out
     )
 
-    assert str(ops[0].dest).startswith(str(out))
+    assert str(plan.ops[0].dest).startswith(str(out))
 
 
 def test_execute_renames(tmp_path: Path):
@@ -95,13 +106,13 @@ def test_execute_renames(tmp_path: Path):
     f1.write_text("data")
 
     episodes = _make_episodes(1, 1)
-    ops = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
-    count = execute_renames(ops, show_name="Show", tmdb_id=99999)
+    plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+    count = execute_renames(plan.ops, show_name="Show", tmdb_id=99999)
 
     assert count == 1
-    assert ops[0].dest.exists()
+    assert plan.ops[0].dest.exists()
     assert not f1.exists()
-    nfo = ops[0].dest.parent.parent / "tvshow.nfo"
+    nfo = plan.ops[0].dest.parent.parent / "tvshow.nfo"
     assert nfo.exists()
     assert "<tmdbid>99999</tmdbid>" in nfo.read_text()
 
@@ -113,8 +124,8 @@ def test_execute_renames_with_log(tmp_path: Path):
 
     log = tmp_path / "changes.log"
     episodes = _make_episodes(1, 1)
-    ops = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
-    execute_renames(ops, log_path=log)
+    plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+    execute_renames(plan.ops, log_path=log)
 
     assert log.exists()
     assert "S01E01" in log.read_text()
@@ -130,7 +141,7 @@ def test_execute_renames_partial_failure(tmp_path: Path):
         files.append(f)
 
     episodes = _make_episodes(1, 5)
-    ops = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+    plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
     log = tmp_path / "changes.log"
 
     call_count = 0
@@ -147,7 +158,7 @@ def test_execute_renames_partial_failure(tmp_path: Path):
         patch("tv_renamer.renamer.shutil.move", side_effect=failing_move),
         pytest.raises(OSError, match="S01E03"),
     ):
-        execute_renames(ops, log_path=log)
+        execute_renames(plan.ops, log_path=log)
 
     log_text = log.read_text()
     assert log_text.count(" -> ") == 2
@@ -159,16 +170,16 @@ def test_execute_renames_refuses_overwrite(tmp_path: Path):
     (src / "S01E01.mkv").write_text("original")
 
     episodes = _make_episodes(1, 1)
-    ops = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+    plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
 
-    ops[0].dest.parent.mkdir(parents=True, exist_ok=True)
-    ops[0].dest.write_text("existing")
+    plan.ops[0].dest.parent.mkdir(parents=True, exist_ok=True)
+    plan.ops[0].dest.write_text("existing")
 
     with pytest.raises(FileExistsError, match="Destination already exists"):
-        execute_renames(ops)
+        execute_renames(plan.ops)
 
     assert (src / "S01E01.mkv").exists()
-    assert ops[0].dest.read_text() == "existing"
+    assert plan.ops[0].dest.read_text() == "existing"
 
 
 def test_execute_renames_overwrite_aborts_whole_batch(tmp_path: Path):
@@ -178,13 +189,13 @@ def test_execute_renames_overwrite_aborts_whole_batch(tmp_path: Path):
     (src / "S01E02.mkv").write_text("data2")
 
     episodes = _make_episodes(1, 2)
-    ops = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+    plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
 
-    ops[0].dest.parent.mkdir(parents=True, exist_ok=True)
-    ops[0].dest.write_text("blocker")
+    plan.ops[0].dest.parent.mkdir(parents=True, exist_ok=True)
+    plan.ops[0].dest.write_text("blocker")
 
     with pytest.raises(FileExistsError):
-        execute_renames(ops)
+        execute_renames(plan.ops)
 
     assert (src / "S01E01.mkv").exists()
     assert (src / "S01E02.mkv").exists()
@@ -196,9 +207,11 @@ def test_no_match_files_skipped(tmp_path: Path):
     (src / "random_movie.mkv").touch()
 
     episodes = _make_episodes(1, 5)
-    ops = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+    plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
 
-    assert len(ops) == 0
+    assert len(plan.ops) == 0
+    assert len(plan.unmatched) == 1
+    assert plan.unmatched[0].name == "random_movie.mkv"
 
 
 def test_write_nfo(tmp_path: Path):
@@ -207,6 +220,38 @@ def test_write_nfo(tmp_path: Path):
     content = nfo.read_text()
     assert "<tmdbid>246</tmdbid>" in content
     assert "<title>Avatar: The Last Airbender</title>" in content
+
+
+class TestRenamePlanUnmatched:
+    def test_mixed_matched_and_unmatched(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "S01E01.mkv").touch()
+        (src / "S01E02.mkv").touch()
+        (src / "S01E03.mkv").touch()
+        (src / "random_movie.mkv").touch()
+        (src / "bonus_content.mkv").touch()
+
+        episodes = _make_episodes(1, 3)
+        plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+
+        assert len(plan.ops) == 3
+        assert len(plan.unmatched) == 2
+        unmatched_names = {p.name for p in plan.unmatched}
+        assert "random_movie.mkv" in unmatched_names
+        assert "bonus_content.mkv" in unmatched_names
+
+    def test_returns_rename_plan_type(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "S01E01.mkv").touch()
+
+        episodes = _make_episodes(1, 1)
+        plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+
+        assert isinstance(plan, RenamePlan)
+        assert isinstance(plan.ops, list)
+        assert isinstance(plan.unmatched, list)
 
 
 class TestWriteNfoXmlEscape:
@@ -262,11 +307,11 @@ class TestPlanRenamesSpecials:
         (src / "Show.S00E03.mkv").touch()
 
         episodes = [Episode(season=0, episode=3, name="Special Three")]
-        ops = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+        plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
 
-        assert len(ops) == 1
-        assert "Season 0" in str(ops[0].dest)
-        assert "S00E03" in ops[0].dest.name
+        assert len(plan.ops) == 1
+        assert "Season 0" in str(plan.ops[0].dest)
+        assert "S00E03" in plan.ops[0].dest.name
 
     def test_season_override_zero_honored(self, tmp_path: Path):
         src = tmp_path / "source"
@@ -274,7 +319,7 @@ class TestPlanRenamesSpecials:
         (src / "01.mp4").touch()
 
         episodes = [Episode(season=0, episode=1, name="Pilot Special")]
-        ops = plan_renames(
+        plan = plan_renames(
             src,
             show_name="Show",
             year="2020",
@@ -283,9 +328,9 @@ class TestPlanRenamesSpecials:
             season_override=0,
         )
 
-        assert len(ops) == 1
-        assert "Season 0" in str(ops[0].dest)
-        assert "S00E01" in ops[0].dest.name
+        assert len(plan.ops) == 1
+        assert "Season 0" in str(plan.ops[0].dest)
+        assert "S00E01" in plan.ops[0].dest.name
 
     def test_no_season_defaults_to_one(self, tmp_path: Path):
         src = tmp_path / "source"
@@ -293,11 +338,11 @@ class TestPlanRenamesSpecials:
         (src / "01title.ts").touch()
 
         episodes = _make_episodes(1, 1)
-        ops = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+        plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
 
-        assert len(ops) == 1
-        assert "Season 1" in str(ops[0].dest)
-        assert "S01E01" in ops[0].dest.name
+        assert len(plan.ops) == 1
+        assert "Season 1" in str(plan.ops[0].dest)
+        assert "S01E01" in plan.ops[0].dest.name
 
 
 class TestShowDirName:
@@ -323,11 +368,11 @@ class TestPlanRenamesMultiSeason:
             Episode(season=2, episode=1, name="Premiere"),
             Episode(season=2, episode=2, name="Second"),
         ]
-        ops = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
+        plan = plan_renames(src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes)
 
-        assert len(ops) == 3
-        s1_ops = [op for op in ops if "Season 1" in str(op.dest)]
-        s2_ops = [op for op in ops if "Season 2" in str(op.dest)]
+        assert len(plan.ops) == 3
+        s1_ops = [op for op in plan.ops if "Season 1" in str(op.dest)]
+        s2_ops = [op for op in plan.ops if "Season 2" in str(op.dest)]
         assert len(s1_ops) == 1
         assert len(s2_ops) == 2
 
@@ -341,7 +386,7 @@ class TestPlanRenamesMultiSeason:
             Episode(season=3, episode=1, name="First"),
             Episode(season=3, episode=2, name="Second"),
         ]
-        ops = plan_renames(
+        plan = plan_renames(
             src,
             show_name="Show",
             year="2020",
@@ -350,6 +395,6 @@ class TestPlanRenamesMultiSeason:
             season_override=3,
         )
 
-        assert len(ops) == 2
-        assert all("Season 3" in str(op.dest) for op in ops)
-        assert all("S03E" in op.dest.name for op in ops)
+        assert len(plan.ops) == 2
+        assert all("Season 3" in str(op.dest) for op in plan.ops)
+        assert all("S03E" in op.dest.name for op in plan.ops)
