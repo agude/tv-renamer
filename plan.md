@@ -150,8 +150,8 @@ Takes a TMDB movie ID. Calls `get_movie()`, prints name, year, runtime, and
 overview.
 
 **Acceptance:**
-- [ ] `tv-renamer movie 550` prints movie details.
-- [ ] Requires `TMDBClient` (sets `needs_client=True`).
+- [x] `tv-renamer movie 550` prints movie details.
+- [x] Requires `TMDBClient` (sets `needs_client=True`).
 
 ### 3.2 Add `movie-rename` subcommand
 
@@ -163,11 +163,11 @@ via `plan_movie_rename()`, executes or previews. Writes `movie.nfo` on real
 runs.
 
 **Acceptance:**
-- [ ] `movie-rename file.mkv --id 550 --dry-run` previews the rename.
-- [ ] `movie-rename file.mkv --id 550` moves the file and writes `movie.nfo`.
-- [ ] `--output` overrides the destination root directory.
-- [ ] `--log` writes the move and NFO path to the log file.
-- [ ] Log format matches the existing `source -> dest` / `wrote path` format.
+- [x] `movie-rename file.mkv --id 550 --dry-run` previews the rename.
+- [x] `movie-rename file.mkv --id 550` moves the file and writes `movie.nfo`.
+- [x] `--output` overrides the destination root directory.
+- [x] `--log` writes the move and NFO path to the log file.
+- [x] Log format matches the existing `source -> dest` / `wrote path` format.
 
 ### 3.3 Verify undo works for movie renames
 
@@ -178,9 +178,9 @@ lines generically. Verify it reverses movie renames without code changes.
 Add a test if the log format is compatible (it should be).
 
 **Acceptance:**
-- [ ] `rename` then `undo` on a movie log restores the original file.
-- [ ] `movie.nfo` is removed by undo.
-- [ ] Emptied movie directory is pruned.
+- [x] `rename` then `undo` on a movie log restores the original file.
+- [x] `movie.nfo` is removed by undo.
+- [x] Emptied movie directory is pruned.
 
 ### 3.4 CLI tests
 
@@ -190,8 +190,8 @@ Test `movie` subcommand output, `movie-rename --dry-run` preview, and actual
 rename execution.
 
 **Acceptance:**
-- [ ] Tests cover both `movie` and `movie-rename` subcommands.
-- [ ] `just check` passes.
+- [x] Tests cover both `movie` and `movie-rename` subcommands.
+- [x] `just check` passes.
 
 ---
 

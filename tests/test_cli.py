@@ -8,7 +8,7 @@ import pytest
 from requests import HTTPError, Response
 
 from tv_renamer.cli import main
-from tv_renamer.tmdb import Episode, SearchResult, SeasonSummary, ShowInfo
+from tv_renamer.tmdb import Episode, MovieInfo, SearchResult, SeasonSummary, ShowInfo
 
 
 def test_no_args_exits():
@@ -35,6 +35,10 @@ def _mock_client(**overrides: object) -> MagicMock:
         ShowInfo(tmdb_id=1, name="Show", first_air_date="2020-01-01", seasons=[]),
     )
     client.get_episodes.return_value = overrides.get("get_episodes", [])
+    client.get_movie.return_value = overrides.get(
+        "get_movie",
+        MovieInfo(tmdb_id=1, name="Movie", release_date="2020-01-01", overview="", runtime=120),
+    )
     return client
 
 
@@ -402,3 +406,125 @@ class TestErrorBoundary:
         assert ret == 1
         err = capsys.readouterr().err
         assert "rsync: some error" in err
+
+
+class TestMovieCommand:
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_movie_prints_details(self, MockClient: MagicMock, capsys):
+        client = _mock_client(
+            get_movie=MovieInfo(
+                tmdb_id=550,
+                name="Fight Club",
+                release_date="1999-10-15",
+                overview="An insomniac office worker...",
+                runtime=139,
+            ),
+        )
+        MockClient.return_value = client
+        main(["movie", "550"])
+
+        out = capsys.readouterr().out
+        assert "Fight Club" in out
+        assert "1999" in out
+        assert "139 min" in out
+
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_movie_unknown_runtime(self, MockClient: MagicMock, capsys):
+        client = _mock_client(
+            get_movie=MovieInfo(
+                tmdb_id=1, name="Test", release_date="2020-01-01", overview="", runtime=None
+            ),
+        )
+        MockClient.return_value = client
+        main(["movie", "1"])
+
+        out = capsys.readouterr().out
+        assert "unknown" in out
+
+
+class TestMovieRenameCommand:
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_movie_rename_dry_run(self, MockClient: MagicMock, tmp_path: Path, capsys):
+        movie_file = tmp_path / "fight_club.mkv"
+        movie_file.write_text("data")
+
+        client = _mock_client(
+            get_movie=MovieInfo(
+                tmdb_id=550,
+                name="Fight Club",
+                release_date="1999-10-15",
+                overview="",
+                runtime=139,
+            ),
+        )
+        MockClient.return_value = client
+        main(["movie-rename", str(movie_file), "--id", "550", "--dry-run"])
+
+        out = capsys.readouterr().out
+        assert "DRY RUN" in out
+        assert "would be renamed" in out
+        assert movie_file.exists()
+
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_movie_rename_executes(self, MockClient: MagicMock, tmp_path: Path, capsys):
+        movie_file = tmp_path / "fight_club.mkv"
+        movie_file.write_text("data")
+
+        client = _mock_client(
+            get_movie=MovieInfo(
+                tmdb_id=550,
+                name="Fight Club",
+                release_date="1999-10-15",
+                overview="",
+                runtime=139,
+            ),
+        )
+        MockClient.return_value = client
+        main(["movie-rename", str(movie_file), "--id", "550"])
+
+        out = capsys.readouterr().out
+        assert "1 file renamed" in out
+        assert not movie_file.exists()
+
+        movie_dir = tmp_path / "Fight Club (1999) [tmdbid-550]"
+        assert movie_dir.exists()
+        assert (movie_dir / "movie.nfo").exists()
+        assert (movie_dir / "Fight Club (1999) [tmdbid-550].mkv").exists()
+
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_movie_rename_with_log(self, MockClient: MagicMock, tmp_path: Path, capsys):
+        movie_file = tmp_path / "movie.mkv"
+        movie_file.write_text("data")
+        log = tmp_path / "changes.log"
+
+        client = _mock_client(
+            get_movie=MovieInfo(
+                tmdb_id=1, name="Test", release_date="2020-01-01", overview="", runtime=90
+            ),
+        )
+        MockClient.return_value = client
+        main(["movie-rename", str(movie_file), "--id", "1", "--log", str(log)])
+
+        assert log.exists()
+        log_text = log.read_text()
+        assert " -> " in log_text
+        assert "wrote " in log_text
+        assert "movie.nfo" in log_text
+
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_movie_rename_custom_output(self, MockClient: MagicMock, tmp_path: Path, capsys):
+        movie_file = tmp_path / "movie.mkv"
+        movie_file.write_text("data")
+        out_dir = tmp_path / "output"
+
+        client = _mock_client(
+            get_movie=MovieInfo(
+                tmdb_id=1, name="Test", release_date="2020-01-01", overview="", runtime=90
+            ),
+        )
+        MockClient.return_value = client
+        main(["movie-rename", str(movie_file), "--id", "1", "--output", str(out_dir)])
+
+        out = capsys.readouterr().out
+        assert "1 file renamed" in out
+        assert (out_dir / "Test (2020) [tmdbid-1]" / "Test (2020) [tmdbid-1].mkv").exists()

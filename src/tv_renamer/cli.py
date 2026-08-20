@@ -12,7 +12,14 @@ from requests import HTTPError
 
 from tv_renamer.copier import copy_to_dest
 from tv_renamer.planner import generate_plan, plan_to_renames, read_plan, write_plan
-from tv_renamer.renamer import execute_renames, parse_log, plan_renames, undo_renames
+from tv_renamer.renamer import (
+    execute_renames,
+    parse_log,
+    plan_movie_rename,
+    plan_renames,
+    undo_renames,
+    write_movie_nfo,
+)
 from tv_renamer.scanner import scan_directory
 from tv_renamer.tmdb import TMDBClient
 
@@ -245,6 +252,59 @@ def _cmd_copy(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def _cmd_movie(args: argparse.Namespace) -> None:
+    client: TMDBClient = args.client
+    movie = client.get_movie(args.id)
+    runtime = f"{movie.runtime} min" if movie.runtime else "unknown"
+    print(f"\n  {movie.name} ({movie.year})")
+    print(f"  Runtime: {runtime}")
+    if movie.overview:
+        print(f"  {movie.overview[:200]}")
+
+
+def _cmd_movie_rename(args: argparse.Namespace) -> None:
+    client: TMDBClient = args.client
+    dry_run: bool = args.dry_run
+    log_path = Path(args.log) if args.log else None
+    output = Path(args.output) if args.output else None
+
+    movie = client.get_movie(args.id)
+    file = Path(args.file)
+    print(f"\n  Movie: {movie.name} ({movie.year})")
+
+    op = plan_movie_rename(
+        file,
+        movie_name=movie.name,
+        year=movie.year,
+        tmdb_id=movie.tmdb_id,
+        output=output,
+    )
+
+    label = "[DRY RUN] " if dry_run else ""
+    print(f"  {label}{op.source.name}")
+    print(f"    -> {op.dest}")
+
+    if dry_run:
+        print("\n  1 file would be renamed.")
+    else:
+        op.dest.parent.mkdir(parents=True, exist_ok=True)
+        import shutil
+
+        if op.dest.exists():
+            raise FileExistsError(f"Destination already exists: {op.dest}")
+        shutil.move(str(op.source), str(op.dest))
+        nfo = write_movie_nfo(op.dest.parent, movie.name, movie.tmdb_id)
+
+        log_lines: list[str] = []
+        log_lines.append(f"{op.source} -> {op.dest}\n")
+        log_lines.append(f"wrote {nfo}\n")
+        if log_path:
+            with log_path.open("a") as f:
+                f.writelines(log_lines)
+
+        print("\n  1 file renamed.")
+
+
 def _http_message(exc: HTTPError) -> str:
     if exc.response is not None:
         if exc.response.status_code == 401:
@@ -305,6 +365,20 @@ def main(argv: list[str] | None = None) -> int:
     p_rename.add_argument("--log", default=None, help="Log file path")
     p_rename.add_argument("--plan", default=None, help="YAML plan file (replaces directory/--id)")
     p_rename.set_defaults(func=_cmd_rename)
+
+    # movie
+    p_movie = sub.add_parser("movie", help="Show details for a TMDB movie")
+    p_movie.add_argument("id", type=int, help="TMDB movie ID")
+    p_movie.set_defaults(func=_cmd_movie, needs_client=True)
+
+    # movie-rename
+    p_mren = sub.add_parser("movie-rename", help="Rename a movie file to Jellyfin format")
+    p_mren.add_argument("file", help="Movie file to rename")
+    p_mren.add_argument("--id", type=int, required=True, help="TMDB movie ID")
+    p_mren.add_argument("--output", default=None, help="Output root directory")
+    p_mren.add_argument("--dry-run", action="store_true", help="Preview without renaming")
+    p_mren.add_argument("--log", default=None, help="Log file path")
+    p_mren.set_defaults(func=_cmd_movie_rename, needs_client=True)
 
     # undo
     p_undo = sub.add_parser("undo", help="Reverse a logged rename batch")

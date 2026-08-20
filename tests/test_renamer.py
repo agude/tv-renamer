@@ -718,6 +718,36 @@ class TestPlanRenamesMultiSeason:
         assert all("S03E" in op.dest.name for op in plan.ops)
 
 
+class TestMovieUndo:
+    def test_undo_restores_movie_file(self, tmp_path: Path):
+        movie = tmp_path / "fight_club.mkv"
+        movie.write_text("movie data")
+
+        op = plan_movie_rename(movie, movie_name="Fight Club", year="1999", tmdb_id=550)
+        log = tmp_path / "changes.log"
+
+        op.dest.parent.mkdir(parents=True, exist_ok=True)
+        import shutil
+
+        shutil.move(str(op.source), str(op.dest))
+        nfo = write_movie_nfo(op.dest.parent, "Fight Club", 550)
+
+        with log.open("a") as f:
+            f.write(f"{op.source} -> {op.dest}\n")
+            f.write(f"wrote {nfo}\n")
+
+        assert not movie.exists()
+        assert op.dest.exists()
+
+        undo_plan = parse_log(log)
+        undo_renames(undo_plan)
+
+        assert movie.exists()
+        assert movie.read_text() == "movie data"
+        assert not nfo.exists()
+        assert not op.dest.parent.exists()
+
+
 class TestMovieDirName:
     def test_standard_format(self):
         assert movie_dir_name("Fight Club", "1999", 550) == "Fight Club (1999) [tmdbid-550]"
