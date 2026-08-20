@@ -28,6 +28,10 @@ from tv_renamer.matcher import FileMatch, extract_episode, match_files
         ("001Title.ts", (None, 1, None, "bare_leading")),
         ("10神奇宝贝乡的妙蛙种子.mp4", (None, 10, None, "bare_leading")),
         ("死神粤语01.ts", (None, 1, None, "bare_trailing")),
+        # EP prefix (common in CJK rips)
+        ("美少女戰士Crystal_EP01 阿兔 Sailor Moon.mp4", (None, 1, None, "ep_prefix")),
+        ("Show_EP100.mp4", (None, 100, None, "ep_prefix")),
+        ("[粵語] Show_EP42 Title.mp4", (None, 42, None, "ep_prefix")),
         # No match
         ("Movie Title (2020).mkv", (None, None, None, None)),
         ("README.txt", (None, None, None, None)),
@@ -107,7 +111,26 @@ def test_extract_episode_resolution_not_matched(
 @pytest.mark.parametrize(
     "filename, expected",
     [
+        # EP prefix does not match inside words
+        ("SETUP01.mkv", (None, 1, None, "bare_trailing")),
+        ("SEP01.mkv", (None, 1, None, "bare_trailing")),
+        # EP prefix with too many digits falls through
         ("ep12345.mkv", (None, None, None, None)),
+        # EP prefix with dot separator
+        ("Show_EP.03.mp4", (None, 3, None, "ep_prefix")),
+        # EP prefix zero is not valid
+        ("EP00.mp4", (None, None, None, None)),
+    ],
+)
+def test_extract_episode_ep_prefix_edge_cases(
+    filename: str, expected: tuple[int | None, int | None, int | None, str | None]
+):
+    assert extract_episode(filename) == expected
+
+
+@pytest.mark.parametrize(
+    "filename, expected",
+    [
         ("Show.name.2020.mkv", (None, 2020, None, "bare_trailing")),
     ],
 )

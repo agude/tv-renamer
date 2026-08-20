@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from requests import HTTPError
 
 from tv_renamer.copier import copy_to_dest
+from tv_renamer.planner import generate_plan, plan_to_renames, read_plan, write_plan
 from tv_renamer.renamer import execute_renames, parse_log, plan_renames, undo_renames
 from tv_renamer.scanner import scan_directory
 from tv_renamer.tmdb import TMDBClient
@@ -75,17 +76,14 @@ def _cmd_episodes(args: argparse.Namespace) -> None:
             print(f"    S{ep.season:02d}E{ep.episode:02d} - {ep.name}")
 
 
-def _cmd_rename(args: argparse.Namespace) -> None:
+def _cmd_plan(args: argparse.Namespace) -> None:
     client: TMDBClient = args.client
     tmdb_id: int = args.id
     directory = Path(args.directory)
-    dry_run: bool = args.dry_run
     season_override: int | None = args.season
-    log_path = Path(args.log) if args.log else None
-    output = Path(args.output) if args.output else None
+    out_file = Path(args.out) if args.out else None
 
     show = client.get_show(tmdb_id)
-    print(f"\n  Show: {show.name} ({show.year})")
 
     if season_override is not None:
         all_episodes = client.get_episodes(tmdb_id, season_override)
@@ -94,15 +92,69 @@ def _cmd_rename(args: argparse.Namespace) -> None:
         for s in show.seasons:
             all_episodes.extend(client.get_episodes(tmdb_id, s.season_number))
 
-    plan = plan_renames(
+    plan_data = generate_plan(
         directory,
         show_name=show.name,
         year=show.year,
         tmdb_id=tmdb_id,
         episodes=all_episodes,
-        output=output,
         season_override=season_override,
     )
+
+    if out_file:
+        write_plan(plan_data, out_file)
+        matched = sum(1 for e in plan_data.files if e.episode is not None)
+        unmatched = len(plan_data.files) - matched
+        print(f"  Plan written to {out_file}")
+        print(f"  {matched} matched, {unmatched} unmatched, {len(plan_data.files)} total")
+    else:
+        write_plan(plan_data, Path("/dev/stdout"))
+
+
+def _cmd_rename(args: argparse.Namespace) -> None:
+    dry_run: bool = args.dry_run
+    log_path = Path(args.log) if args.log else None
+
+    if args.plan:
+        plan_data = read_plan(Path(args.plan))
+        output = Path(args.output) if args.output else None
+        rename_plan = plan_to_renames(plan_data, output_override=output)
+        show_name = plan_data.show
+        tmdb_id = plan_data.tmdb_id
+        print(f"\n  Show: {show_name} ({plan_data.year})")
+        print(f"  Plan: {args.plan}")
+    else:
+        if not args.directory or args.id is None:
+            print("error: provide either --plan or both directory and --id", file=sys.stderr)
+            sys.exit(1)
+        client: TMDBClient = args.client
+        tmdb_id = args.id
+        directory = Path(args.directory)
+        season_override: int | None = args.season
+        output = Path(args.output) if args.output else None
+
+        show = client.get_show(tmdb_id)
+        show_name = show.name
+        print(f"\n  Show: {show.name} ({show.year})")
+
+        if season_override is not None:
+            all_episodes = client.get_episodes(tmdb_id, season_override)
+        else:
+            all_episodes = []
+            for s in show.seasons:
+                all_episodes.extend(client.get_episodes(tmdb_id, s.season_number))
+
+        rename_plan = plan_renames(
+            directory,
+            show_name=show.name,
+            year=show.year,
+            tmdb_id=tmdb_id,
+            episodes=all_episodes,
+            output=output,
+            season_override=season_override,
+        )
+
+    plan = rename_plan
 
     if not plan.ops:
         print("  No files matched.")
@@ -142,7 +194,7 @@ def _cmd_rename(args: argparse.Namespace) -> None:
         count = execute_renames(
             plan.ops,
             log_path=log_path,
-            show_name=show.name,
+            show_name=show_name,
             tmdb_id=tmdb_id,
         )
         print(f"\n  {count} files renamed.")
@@ -233,15 +285,26 @@ def main(argv: list[str] | None = None) -> int:
     p_ep.add_argument("--season", type=int, default=None, help="Season number")
     p_ep.set_defaults(func=_cmd_episodes, needs_client=True)
 
+    # plan
+    p_plan = sub.add_parser("plan", help="Generate a YAML rename plan for editing")
+    p_plan.add_argument("directory", help="Directory containing episodes")
+    p_plan.add_argument("--id", type=int, required=True, help="TMDB show ID")
+    p_plan.add_argument("--season", type=int, default=None, help="Force season number")
+    p_plan.add_argument("-o", "--out", default=None, help="Output YAML file (default: stdout)")
+    p_plan.set_defaults(func=_cmd_plan, needs_client=True)
+
     # rename
     p_rename = sub.add_parser("rename", help="Rename episodes to Jellyfin format")
-    p_rename.add_argument("directory", help="Directory containing episodes")
-    p_rename.add_argument("--id", type=int, required=True, help="TMDB show ID")
+    p_rename.add_argument(
+        "directory", nargs="?", default=None, help="Directory containing episodes"
+    )
+    p_rename.add_argument("--id", type=int, default=None, help="TMDB show ID")
     p_rename.add_argument("--season", type=int, default=None, help="Force season number")
     p_rename.add_argument("--output", default=None, help="Output root directory")
     p_rename.add_argument("--dry-run", action="store_true", help="Preview without renaming")
     p_rename.add_argument("--log", default=None, help="Log file path")
-    p_rename.set_defaults(func=_cmd_rename, needs_client=True)
+    p_rename.add_argument("--plan", default=None, help="YAML plan file (replaces directory/--id)")
+    p_rename.set_defaults(func=_cmd_rename)
 
     # undo
     p_undo = sub.add_parser("undo", help="Reverse a logged rename batch")
@@ -259,7 +322,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        if getattr(args, "needs_client", False):
+        if getattr(args, "needs_client", False) or (args.command == "rename" and not args.plan):
             args.client = TMDBClient()
         args.func(args)
     except HTTPError as exc:

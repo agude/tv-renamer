@@ -74,6 +74,37 @@ def show_dir_name(show_name: str, year: str, tmdb_id: int) -> str:
     return f"{safe_show} ({year}) [tmdbid-{tmdb_id}]"
 
 
+def build_episode_path(
+    *,
+    out_root: Path,
+    show_name: str,
+    year: str,
+    tmdb_id: int,
+    season: int,
+    episode: int,
+    ep_title: str | None = None,
+    extension: str,
+    part: int | None = None,
+) -> Path:
+    """Build the Jellyfin-standard destination path for a single episode."""
+    safe_show = _safe_name(show_name)
+    dir_name = show_dir_name(show_name, year, tmdb_id)
+
+    ep_tag = f"S{season:02d}E{episode:02d}"
+    if ep_title:
+        title = _safe_name(ep_title)
+        if part is not None:
+            title = f"{title} (Part {part})"
+        new_name = _truncate_filename(f"{safe_show} - {ep_tag} - {title}{extension}")
+    else:
+        if part is not None:
+            new_name = f"{safe_show} - {ep_tag} (Part {part}){extension}"
+        else:
+            new_name = f"{safe_show} - {ep_tag}{extension}"
+
+    return out_root / dir_name / f"Season {season}" / new_name
+
+
 def plan_renames(
     directory: Path,
     *,
@@ -127,7 +158,7 @@ def plan_renames(
 
         if (
             fm.pattern is not None
-            and fm.pattern.startswith("bare")
+            and fm.pattern in ("bare_leading", "bare_trailing", "ep_prefix")
             and fm.episode > max_ep_per_season.get(season, 0)
         ):
             unmatched.append(fm.path)

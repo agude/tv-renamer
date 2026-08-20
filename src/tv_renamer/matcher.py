@@ -35,6 +35,9 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 
 _RESOLUTION_HEIGHTS = frozenset({480, 576, 720, 1080, 1440, 2160})
 
+# EP prefix: common in CJK rips ("美少女戰士Crystal_EP01 阿兔.mp4")
+_EP_PREFIX = re.compile(r"(?<![A-Za-z])EP\.?(\d{1,4})(?!\d)", re.IGNORECASE)
+
 # Bare number: leading ("01 - title.mp4") or trailing after non-digit chars ("死神粤语01.ts")
 _BARE_LEADING = re.compile(r"^(\d{1,4})")
 _BARE_TRAILING = re.compile(r"(?<!\d)(\d{1,4})$")
@@ -60,6 +63,12 @@ def extract_episode(
             if name == "XxXX" and ep_num in _RESOLUTION_HEIGHTS:
                 continue
             return season_num, ep_num, None, name
+
+    m = _EP_PREFIX.search(filename)
+    if m:
+        num = int(m.group(1))
+        if num > 0:
+            return None, num, None, "ep_prefix"
 
     m = _BARE_LEADING.match(filename)
     if m:

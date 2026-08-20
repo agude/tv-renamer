@@ -7,6 +7,7 @@ readme = "README.md"
 license = {file = "LICENSE.md"}
 dependencies = [
     "python-dotenv>=1.0",
+    "pyyaml>=6.0",
     "requests>=2.31",
 ]
 
@@ -27,10 +28,11 @@ packages = ["src/tv_renamer"]
 
 [dependency-groups]
 dev = [
+    "mypy>=1.15",
     "pytest>=8.0",
     "pytest-cov>=6.0",
     "ruff>=0.16",
-    "mypy>=1.15",
+    "types-pyyaml>=6.0",
 ]
 
 [tool.ruff]

@@ -59,6 +59,40 @@ Processing the portable drive is done show by show across sessions:
 4. `copy` the organized show to the NAS destination.
 5. Repeat until done.
 
+## Operator verification
+
+The tool matches files to episodes by the number extracted from the
+filename. It has no way to verify the match is correct — that is the
+operator's job. **Do not trust a dry-run at face value.**
+
+Common pitfalls:
+
+- **Split episodes.** Regional broadcasts (especially Cantonese/ViuTV)
+  split double-length premieres and finales into two parts. A 44-minute
+  US episode becomes two 21-minute files, shifting every subsequent
+  episode number by one. Compare the file count against the TMDB episode
+  count; a mismatch is a red flag.
+- **Different broadcast order.** International broadcasts may air episodes
+  in a different order than the US original. Episode numbers in filenames
+  reflect the local broadcast, not necessarily TMDB's ordering.
+- **Season boundaries.** Rippers sometimes number episodes sequentially
+  across seasons (E24, E25) instead of restarting at S02E01. Files past
+  the TMDB season length get renamed without titles — check what they
+  actually are.
+
+Verification techniques:
+
+- **Count check.** Compare file count to TMDB season episode count. If
+  they don't match, investigate before renaming.
+- **Duration check.** Use `ffprobe` to compare durations. A 44-minute
+  file in a run of 21-minute files is a double episode. All files the
+  same length when TMDB has a double-length premiere means it was split.
+- **Frame extraction.** Use `ffmpeg -ss <time> -frames:v 1` to grab
+  frames. Check for title cards, writer credits, and recognizable scenes.
+  Match these against TMDB episode descriptions.
+- **Metadata check.** `ffprobe -show_entries format_tags` sometimes has
+  embedded episode titles, though rips often strip this.
+
 ## Architecture
 
 ```
