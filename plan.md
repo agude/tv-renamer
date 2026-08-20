@@ -344,8 +344,8 @@ Update architecture table to list any new modules. Update workflow section
 to cover movie commands. Add movie output format example.
 
 **Acceptance:**
-- [ ] Architecture table includes all source modules.
-- [ ] Movie workflow is documented parallel to the TV workflow.
+- [x] Architecture table includes all source modules.
+- [x] Movie workflow is documented parallel to the TV workflow.
 
 ### 6.2 Update CLI description
 
@@ -355,13 +355,13 @@ Change program description from "TV media files" to "TV and movie media
 files". Update help strings as needed.
 
 **Acceptance:**
-- [ ] `tv-renamer --help` mentions movies.
+- [x] `tv-renamer --help` mentions movies.
 
 ### 6.3 Final gate
 
 **Acceptance:**
-- [ ] `just check` passes (lint + type-check + test).
-- [ ] All checkboxes in this plan are checked.
+- [x] `just check` passes (lint + type-check + test).
+- [x] All checkboxes in this plan are checked.
 
 ---
 

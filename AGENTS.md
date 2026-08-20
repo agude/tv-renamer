@@ -4,8 +4,9 @@
 
 # tv-renamer
 
-Rename and organize ripped TV media files into Jellyfin-standard naming.
-This is an interactive tool — Claude Code is the operator, not the end user.
+Rename and organize ripped TV and movie media files into Jellyfin-standard
+naming. This is an interactive tool — Claude Code is the operator, not the
+end user.
 
 ## How it works
 
@@ -26,7 +27,17 @@ Key CLI subcommands, driven by Claude Code in conversation:
    season folders as needed. Matches files to episodes by the episode number
    extracted from the filename. Also writes a `tvshow.nfo` with the TMDB ID.
 
-5. `uv run tv-renamer copy <dir> --dest <path> [--dry-run]` — rsync
+5. `uv run tv-renamer movie <tmdb-id>` — show details for a TMDB movie
+   (name, year, runtime, overview).
+
+6. `uv run tv-renamer movie-rename <file> --id <tmdb-id> [--dry-run]
+   [--log changes.log]` — rename a single movie file to Jellyfin format.
+   Also supports `--plan plan.yaml` for batch renames.
+
+7. `uv run tv-renamer movie-plan <dir> [-o plan.yaml]` — generate a YAML
+   plan listing movie files for operator assignment of TMDB IDs.
+
+8. `uv run tv-renamer copy <dir> --dest <path> [--dry-run]` — rsync
    organized files to the NAS with verification.
 
 ## Output format
@@ -47,17 +58,30 @@ The `[tmdbid-N]` in the folder name and the `tvshow.nfo` file together
 ensure Jellyfin matches the correct show without guessing. Jellyfin
 auto-generates artwork, per-episode NFOs, and other metadata after import.
 
+Movie rename produces:
+
+```
+Movie Name (Year) [tmdbid-N]/
+├── movie.nfo
+└── Movie Name (Year) [tmdbid-N].ext
+```
+
 ## Workflow
 
 Processing the portable drive is done show by show across sessions:
 
-1. `scan` the source directory to see what's there.
+1. `scan` the source directory to see what's there. Scan separates
+   shows (directories), probable movies, and loose episode files.
 2. Per show: `search` to find the TMDB match, `episodes` to verify,
    `rename --dry-run` to preview, then `rename` to apply.
-3. Before copying, check for duplicates on the NAS. Use `ffprobe` to
+3. Per movie: `search --type movie` to find the TMDB match, `movie` to
+   verify details, `movie-rename --dry-run` to preview, then
+   `movie-rename` to apply. For batches, use `movie-plan` to generate a
+   YAML plan, fill in TMDB IDs, then `movie-rename --plan`.
+4. Before copying, check for duplicates on the NAS. Use `ffprobe` to
    compare resolution, bitrate, and audio quality when both versions exist.
-4. `copy` the organized show to the NAS destination.
-5. Repeat until done.
+5. `copy` the organized show/movie to the NAS destination.
+6. Repeat until done.
 
 ## Operator verification
 
@@ -99,9 +123,11 @@ Verification techniques:
 src/tv_renamer/
 ├── __init__.py      # Version
 ├── cli.py           # Argparse entry point (all subcommands)
+├── constants.py     # Shared constants (MEDIA_EXTENSIONS)
 ├── tmdb.py          # TMDB API client (rate-limited, session-based)
 ├── scanner.py       # Directory inventory and file classification
 ├── matcher.py       # Episode number extraction from filenames
+├── planner.py       # YAML plan generation for episodes and movies
 ├── renamer.py       # Rename orchestration: match → rename → mkdir → nfo
 └── copier.py        # rsync wrapper with verification
 ```
@@ -109,21 +135,25 @@ src/tv_renamer/
 - `tmdb.py` searches and fetches TV shows and movies from TMDB. Uses a
   `TMDBClient` class with `requests.Session` for connection reuse,
   `User-Agent` header, and 0.25s rate limiting between requests.
-- `scanner.py` walks a directory tree and classifies entries as shows vs.
-  movies, reports episode counts and naming patterns.
+- `scanner.py` walks a directory tree and classifies entries as shows,
+  probable movies, and loose episode files.
 - `matcher.py` extracts episode numbers from filenames using multiple
   patterns: `S01E01`, `[S01.E01]`, `1x01`, bare leading numbers (`01`),
   and trailing numbers after CJK characters (`死神粤语01`).
+- `planner.py` generates editable YAML plans for episode and movie
+  assignment, with round-trip serialization and plan-to-rename conversion.
 - `renamer.py` builds target paths from TMDB metadata and computed matches,
-  renames files, creates season directories, writes `tvshow.nfo`.
+  renames files, creates season directories, writes `tvshow.nfo` and
+  `movie.nfo`.
 - `copier.py` wraps rsync for verified transfer to the NAS.
 
 ## Safety
 
-- `scan`, `search`, and `episodes` are read-only.
-- `rename --dry-run` is read-only. Always run it first.
-- `rename` (without `--dry-run`) moves files on disk. Review the dry-run
-  output before running.
+- `scan`, `search`, `episodes`, and `movie` are read-only.
+- `rename --dry-run` and `movie-rename --dry-run` are read-only. Always
+  run them first.
+- `rename` and `movie-rename` (without `--dry-run`) move files on disk.
+  Review the dry-run output before running.
 - `copy --dry-run` previews the rsync without transferring.
 
 ## Environment setup

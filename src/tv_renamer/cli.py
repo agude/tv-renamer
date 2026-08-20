@@ -409,7 +409,7 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(
         prog="tv-renamer",
-        description="Rename and organize TV media files for Jellyfin.",
+        description="Rename and organize TV and movie media files for Jellyfin.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
