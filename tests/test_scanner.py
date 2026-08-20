@@ -9,6 +9,7 @@ def test_scan_empty(tmp_path: Path):
     result = scan_directory(tmp_path)
     assert result.shows == []
     assert result.loose_files == []
+    assert result.movies == []
 
 
 def test_scan_loose_files(tmp_path: Path):
@@ -17,7 +18,8 @@ def test_scan_loose_files(tmp_path: Path):
     (tmp_path / "readme.txt").touch()
 
     result = scan_directory(tmp_path)
-    assert len(result.loose_files) == 2
+    assert len(result.movies) == 2
+    assert result.loose_files == []
     assert result.shows == []
 
 
@@ -53,7 +55,7 @@ def test_scan_mixed(tmp_path: Path):
     (show / "ep01.mp4").touch()
 
     result = scan_directory(tmp_path)
-    assert len(result.loose_files) == 1
+    assert len(result.movies) == 1
     assert len(result.shows) == 1
 
 
@@ -135,3 +137,29 @@ class TestDeepRecursion:
 
         result = scan_directory(tmp_path)
         assert result.shows[0].episode_count == 1
+
+
+class TestMovieClassification:
+    def test_movie_file_classified(self, tmp_path: Path):
+        (tmp_path / "Movie Title (2020).mkv").touch()
+
+        result = scan_directory(tmp_path)
+        assert len(result.movies) == 1
+        assert result.movies[0].name == "Movie Title (2020).mkv"
+        assert len(result.loose_files) == 0
+
+    def test_episode_file_classified_as_loose(self, tmp_path: Path):
+        (tmp_path / "S01E01 - Pilot.mkv").touch()
+
+        result = scan_directory(tmp_path)
+        assert len(result.loose_files) == 1
+        assert result.loose_files[0].name == "S01E01 - Pilot.mkv"
+        assert len(result.movies) == 0
+
+    def test_mixed_movies_and_episodes(self, tmp_path: Path):
+        (tmp_path / "Movie Title (2020).mkv").touch()
+        (tmp_path / "S01E01 - Pilot.mkv").touch()
+
+        result = scan_directory(tmp_path)
+        assert len(result.movies) == 1
+        assert len(result.loose_files) == 1

@@ -36,6 +36,11 @@ from tv_renamer.tmdb import TMDBClient
 def _cmd_scan(args: argparse.Namespace) -> None:
     result = scan_directory(Path(args.directory))
 
+    if result.movies:
+        print(f"\n  Movies ({len(result.movies)}):")
+        for f in result.movies:
+            print(f"    {f.name}")
+
     if result.loose_files:
         print(f"\n  Loose files ({len(result.loose_files)}):")
         for f in result.loose_files:

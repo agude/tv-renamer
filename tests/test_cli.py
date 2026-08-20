@@ -66,6 +66,19 @@ class TestScanCommand:
         assert "movie.mkv" in out
 
     @patch("tv_renamer.cli.scan_directory")
+    def test_scan_prints_movies(self, mock_scan: MagicMock, tmp_path: Path, capsys):
+        from tv_renamer.scanner import LooseFile, ScanResult
+
+        mock_scan.return_value = ScanResult(
+            root=tmp_path,
+            movies=[LooseFile(path=tmp_path / "Movie.mkv", name="Movie.mkv")],
+        )
+        main(["scan", str(tmp_path)])
+        out = capsys.readouterr().out
+        assert "Movies" in out
+        assert "Movie.mkv" in out
+
+    @patch("tv_renamer.cli.scan_directory")
     def test_scan_prints_shows(self, mock_scan: MagicMock, tmp_path: Path, capsys):
         from tv_renamer.scanner import ScanResult, ShowEntry
 

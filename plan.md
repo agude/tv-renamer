@@ -307,9 +307,9 @@ match an episode pattern stay as loose files (likely misplaced episodes).
 Files that don't match any episode pattern are classified as probable movies.
 
 **Acceptance:**
-- [ ] `Some.Movie.2020.mkv` (no episode pattern) classified as movie.
-- [ ] `S01E01 - Pilot.mkv` (episode pattern) classified as loose episode.
-- [ ] Classification is a new field or separate list on `ScanResult`.
+- [x] `Some.Movie.2020.mkv` (no episode pattern) classified as movie.
+- [x] `S01E01 - Pilot.mkv` (episode pattern) classified as loose episode.
+- [x] Classification is a new field or separate list on `ScanResult`.
 
 ### 5.2 Update scan CLI output
 
@@ -319,8 +319,8 @@ Print a "Movies" section listing probable movie files separately from
 episode-looking loose files.
 
 **Acceptance:**
-- [ ] `scan` output has separate "Movies" and "Loose files" sections.
-- [ ] Section is suppressed when empty (no "Movies (0):" noise).
+- [x] `scan` output has separate "Movies" and "Loose files" sections.
+- [x] Section is suppressed when empty (no "Movies (0):" noise).
 
 ### 5.3 Tests for movie classification
 
@@ -329,8 +329,8 @@ episode-looking loose files.
 Verify classification of movie files vs. episode-like files at the top level.
 
 **Acceptance:**
-- [ ] Tests cover both categories.
-- [ ] `just check` passes.
+- [x] Tests cover both categories.
+- [x] `just check` passes.
 
 ---
 

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from tv_renamer.constants import MEDIA_EXTENSIONS
+from tv_renamer.matcher import extract_episode
 
 _SEASON_DIR = re.compile(r"(season\s*\d+|s\d+|specials)", re.IGNORECASE)
 
@@ -31,6 +32,7 @@ class ScanResult:
     root: Path
     shows: list[ShowEntry] = field(default_factory=list)
     loose_files: list[LooseFile] = field(default_factory=list)
+    movies: list[LooseFile] = field(default_factory=list)
 
 
 def scan_directory(root: Path) -> ScanResult:
@@ -46,7 +48,11 @@ def scan_directory(root: Path) -> ScanResult:
             show = _scan_show(entry)
             result.shows.append(show)
         elif entry.is_file() and entry.suffix.lower() in MEDIA_EXTENSIONS:
-            result.loose_files.append(LooseFile(path=entry, name=entry.name))
+            _, ep, _, _ = extract_episode(entry.name)
+            if ep is not None:
+                result.loose_files.append(LooseFile(path=entry, name=entry.name))
+            else:
+                result.movies.append(LooseFile(path=entry, name=entry.name))
 
     return result
 
