@@ -1,4 +1,4 @@
-"""YAML plan generation and execution for manual episode assignment."""
+"""YAML plan generation and execution for manual episode/movie assignment."""
 
 from __future__ import annotations
 
@@ -8,9 +8,10 @@ from pathlib import Path
 
 import yaml
 
+from tv_renamer.constants import MEDIA_EXTENSIONS
 from tv_renamer.matcher import match_files
-from tv_renamer.renamer import RenameOp, RenamePlan, build_episode_path
-from tv_renamer.tmdb import Episode
+from tv_renamer.renamer import RenameOp, RenamePlan, build_episode_path, build_movie_path
+from tv_renamer.tmdb import Episode, TMDBClient
 
 
 @dataclass
@@ -235,6 +236,135 @@ def plan_to_renames(plan: PlanData, *, output_override: Path | None = None) -> R
             ep_title=entry.title,
             extension=Path(entry.file).suffix,
             part=entry.part,
+        )
+        ops.append(RenameOp(source=source, dest=dest))
+
+    dest_sources: dict[Path, list[Path]] = defaultdict(list)
+    for op in ops:
+        dest_sources[op.dest].append(op.source)
+    collisions = {dest: srcs for dest, srcs in dest_sources.items() if len(srcs) > 1}
+
+    return RenamePlan(ops=ops, unmatched=skipped, collisions=collisions)
+
+
+@dataclass
+class MoviePlanEntry:
+    file: str
+    tmdb_id: int | None = None
+    name: str | None = None
+    year: str | None = None
+
+
+@dataclass
+class MoviePlanData:
+    directory: str
+    files: list[MoviePlanEntry] = field(default_factory=list)
+    output: str | None = None
+
+
+def generate_movie_plan(directory: Path) -> MoviePlanData:
+    entries: list[MoviePlanEntry] = []
+    for entry in sorted(directory.iterdir()):
+        if entry.is_file() and entry.suffix.lower() in MEDIA_EXTENSIONS:
+            entries.append(MoviePlanEntry(file=entry.name))
+    return MoviePlanData(directory=str(directory), files=entries)
+
+
+def write_movie_plan(plan: MoviePlanData, path: Path) -> None:
+    lines: list[str] = []
+    lines.append("# tv-renamer movie plan")
+    lines.append("# Fill in tmdb_id for each movie, then run:")
+    lines.append(f"#   tv-renamer movie-rename --plan {path.name} --dry-run")
+    lines.append("")
+    lines.append(f"directory: {_yaml_str(plan.directory)}")
+    if plan.output:
+        lines.append(f"output: {_yaml_str(plan.output)}")
+    lines.append("")
+    lines.append("files:")
+
+    for entry in plan.files:
+        lines.append(f"  - file: {_yaml_str(entry.file)}")
+        if entry.tmdb_id is not None:
+            lines.append(f"    tmdb_id: {entry.tmdb_id}")
+        else:
+            lines.append("    tmdb_id:")
+        if entry.name is not None:
+            lines.append(f"    name: {_yaml_str(entry.name)}")
+        if entry.year is not None:
+            lines.append(f"    year: {_yaml_str(entry.year)}")
+
+        if entry.tmdb_id is None:
+            lines.append("    # set tmdb_id to include, or remove entry to skip")
+
+        lines.append("")
+
+    path.write_text("\n".join(lines))
+
+
+def read_movie_plan(path: Path) -> MoviePlanData:
+    raw = yaml.safe_load(path.read_text())
+    if not isinstance(raw, dict):
+        raise ValueError(f"Plan file must be a YAML mapping, got {type(raw).__name__}")
+
+    for key in ("directory", "files"):
+        if key not in raw:
+            raise ValueError(f"Plan file missing required key: {key}")
+
+    if not isinstance(raw["files"], list):
+        raise ValueError("Plan 'files' must be a list")
+
+    entries: list[MoviePlanEntry] = []
+    for i, item in enumerate(raw["files"]):
+        if not isinstance(item, dict):
+            raise ValueError(f"Plan entry {i} must be a mapping")
+        if "file" not in item:
+            raise ValueError(f"Plan entry {i} missing 'file' key")
+        tmdb_id = item.get("tmdb_id")
+        entries.append(
+            MoviePlanEntry(
+                file=item["file"],
+                tmdb_id=int(tmdb_id) if tmdb_id is not None else None,
+                name=item.get("name"),
+                year=str(item["year"]) if item.get("year") is not None else None,
+            )
+        )
+
+    return MoviePlanData(
+        directory=raw["directory"],
+        files=entries,
+        output=raw.get("output"),
+    )
+
+
+def movie_plan_to_renames(plan: MoviePlanData, client: TMDBClient | None = None) -> RenamePlan:
+    directory = Path(plan.directory)
+    out_root = Path(plan.output) if plan.output else directory.parent
+
+    ops: list[RenameOp] = []
+    skipped: list[Path] = []
+
+    for entry in plan.files:
+        source = directory / entry.file
+        if entry.tmdb_id is None:
+            skipped.append(source)
+            continue
+
+        if entry.name is not None and entry.year is not None:
+            name = entry.name
+            year = entry.year
+        else:
+            if client is None:
+                raise RuntimeError(f"Entry {entry.file} needs TMDB lookup but no client provided")
+            movie = client.get_movie(entry.tmdb_id)
+            name = entry.name or movie.name
+            year = entry.year or movie.year
+
+        dest = build_movie_path(
+            out_root=out_root,
+            movie_name=name,
+            year=year,
+            tmdb_id=entry.tmdb_id,
+            extension=Path(entry.file).suffix,
         )
         ops.append(RenameOp(source=source, dest=dest))
 

@@ -1,20 +1,27 @@
 """Tests for YAML plan generation, serialization, and execution."""
 
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 import yaml
 
 from tv_renamer.planner import (
+    MoviePlanData,
+    MoviePlanEntry,
     PlanData,
     PlanEntry,
+    generate_movie_plan,
     generate_plan,
+    movie_plan_to_renames,
     plan_to_renames,
+    read_movie_plan,
     read_plan,
+    write_movie_plan,
     write_plan,
 )
 from tv_renamer.renamer import build_episode_path
-from tv_renamer.tmdb import Episode
+from tv_renamer.tmdb import Episode, MovieInfo
 
 
 def _make_episodes(season: int, count: int) -> list[Episode]:
@@ -793,3 +800,182 @@ class TestEndToEnd:
         rename_plan = plan_to_renames(plan)
         assert len(rename_plan.ops) == 2
         assert len(rename_plan.unmatched) == 0
+
+
+class TestGenerateMoviePlan:
+    def test_lists_media_files(self, tmp_path: Path):
+        (tmp_path / "movie1.mkv").touch()
+        (tmp_path / "movie2.mp4").touch()
+        (tmp_path / "readme.txt").touch()
+
+        plan = generate_movie_plan(tmp_path)
+
+        assert len(plan.files) == 2
+        assert plan.directory == str(tmp_path)
+        names = {e.file for e in plan.files}
+        assert "movie1.mkv" in names
+        assert "movie2.mp4" in names
+
+    def test_excludes_non_media(self, tmp_path: Path):
+        (tmp_path / "notes.txt").touch()
+        (tmp_path / "cover.jpg").touch()
+
+        plan = generate_movie_plan(tmp_path)
+        assert len(plan.files) == 0
+
+    def test_all_tmdb_fields_null(self, tmp_path: Path):
+        (tmp_path / "movie.mkv").touch()
+
+        plan = generate_movie_plan(tmp_path)
+        entry = plan.files[0]
+        assert entry.tmdb_id is None
+        assert entry.name is None
+        assert entry.year is None
+
+
+class TestWriteMoviePlan:
+    def test_produces_valid_yaml(self, tmp_path: Path):
+        plan = MoviePlanData(
+            directory="/movies",
+            files=[
+                MoviePlanEntry(file="movie.mkv", tmdb_id=550, name="Fight Club", year="1999"),
+            ],
+        )
+        out = tmp_path / "plan.yaml"
+        write_movie_plan(plan, out)
+
+        raw = yaml.safe_load(out.read_text())
+        assert raw["directory"] == "/movies"
+        assert len(raw["files"]) == 1
+        assert raw["files"][0]["tmdb_id"] == 550
+
+    def test_null_tmdb_id_in_yaml(self, tmp_path: Path):
+        plan = MoviePlanData(
+            directory="/movies",
+            files=[MoviePlanEntry(file="unknown.mkv")],
+        )
+        out = tmp_path / "plan.yaml"
+        write_movie_plan(plan, out)
+
+        raw = yaml.safe_load(out.read_text())
+        assert raw["files"][0]["tmdb_id"] is None
+
+    def test_includes_header_comments(self, tmp_path: Path):
+        plan = MoviePlanData(directory="/movies", files=[])
+        out = tmp_path / "plan.yaml"
+        write_movie_plan(plan, out)
+
+        text = out.read_text()
+        assert "movie plan" in text
+        assert "movie-rename --plan" in text
+
+
+class TestReadMoviePlan:
+    def test_round_trip(self, tmp_path: Path):
+        original = MoviePlanData(
+            directory="/movies",
+            files=[
+                MoviePlanEntry(file="fc.mkv", tmdb_id=550, name="Fight Club", year="1999"),
+                MoviePlanEntry(file="unknown.mkv"),
+            ],
+        )
+        path = tmp_path / "plan.yaml"
+        write_movie_plan(original, path)
+        loaded = read_movie_plan(path)
+
+        assert loaded.directory == original.directory
+        assert len(loaded.files) == 2
+        assert loaded.files[0].tmdb_id == 550
+        assert loaded.files[0].name == "Fight Club"
+        assert loaded.files[1].tmdb_id is None
+
+    def test_missing_required_key_raises(self, tmp_path: Path):
+        path = tmp_path / "bad.yaml"
+        path.write_text("directory: /movies\n")
+
+        with pytest.raises(ValueError, match="missing required key"):
+            read_movie_plan(path)
+
+    def test_not_a_mapping_raises(self, tmp_path: Path):
+        path = tmp_path / "bad.yaml"
+        path.write_text("- item\n")
+
+        with pytest.raises(ValueError, match="must be a YAML mapping"):
+            read_movie_plan(path)
+
+    def test_entry_missing_file_raises(self, tmp_path: Path):
+        path = tmp_path / "bad.yaml"
+        path.write_text("directory: /movies\nfiles:\n  - tmdb_id: 1\n")
+
+        with pytest.raises(ValueError, match="missing 'file' key"):
+            read_movie_plan(path)
+
+
+class TestMoviePlanToRenames:
+    def test_basic_renames(self, tmp_path: Path):
+        (tmp_path / "fc.mkv").touch()
+
+        plan = MoviePlanData(
+            directory=str(tmp_path),
+            files=[MoviePlanEntry(file="fc.mkv", tmdb_id=550, name="Fight Club", year="1999")],
+        )
+        result = movie_plan_to_renames(plan)
+
+        assert len(result.ops) == 1
+        assert "Fight Club (1999) [tmdbid-550]" in str(result.ops[0].dest)
+
+    def test_null_tmdb_id_skipped(self, tmp_path: Path):
+        (tmp_path / "unknown.mkv").touch()
+
+        plan = MoviePlanData(
+            directory=str(tmp_path),
+            files=[MoviePlanEntry(file="unknown.mkv")],
+        )
+        result = movie_plan_to_renames(plan)
+
+        assert len(result.ops) == 0
+        assert len(result.unmatched) == 1
+
+    def test_name_year_from_entry_skips_tmdb_lookup(self, tmp_path: Path):
+        (tmp_path / "movie.mkv").touch()
+
+        plan = MoviePlanData(
+            directory=str(tmp_path),
+            files=[MoviePlanEntry(file="movie.mkv", tmdb_id=550, name="Fight Club", year="1999")],
+        )
+        result = movie_plan_to_renames(plan, client=None)
+
+        assert len(result.ops) == 1
+
+    def test_missing_name_triggers_tmdb_lookup(self, tmp_path: Path):
+        (tmp_path / "movie.mkv").touch()
+
+        mock_client = MagicMock()
+        mock_client.get_movie.return_value = MovieInfo(
+            tmdb_id=550, name="Fight Club", release_date="1999-10-15", overview="", runtime=139
+        )
+
+        plan = MoviePlanData(
+            directory=str(tmp_path),
+            files=[MoviePlanEntry(file="movie.mkv", tmdb_id=550)],
+        )
+        result = movie_plan_to_renames(plan, client=mock_client)
+
+        assert len(result.ops) == 1
+        mock_client.get_movie.assert_called_once_with(550)
+        assert "Fight Club" in str(result.ops[0].dest)
+
+    def test_collision_detected(self, tmp_path: Path):
+        (tmp_path / "a.mkv").touch()
+        (tmp_path / "b.mkv").touch()
+
+        plan = MoviePlanData(
+            directory=str(tmp_path),
+            files=[
+                MoviePlanEntry(file="a.mkv", tmdb_id=550, name="Fight Club", year="1999"),
+                MoviePlanEntry(file="b.mkv", tmdb_id=550, name="Fight Club", year="1999"),
+            ],
+        )
+        result = movie_plan_to_renames(plan)
+
+        assert len(result.collisions) == 1

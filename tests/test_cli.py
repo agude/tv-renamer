@@ -483,7 +483,7 @@ class TestMovieRenameCommand:
         main(["movie-rename", str(movie_file), "--id", "550"])
 
         out = capsys.readouterr().out
-        assert "1 file renamed" in out
+        assert "file(s) renamed" in out
         assert not movie_file.exists()
 
         movie_dir = tmp_path / "Fight Club (1999) [tmdbid-550]"
@@ -526,5 +526,79 @@ class TestMovieRenameCommand:
         main(["movie-rename", str(movie_file), "--id", "1", "--output", str(out_dir)])
 
         out = capsys.readouterr().out
-        assert "1 file renamed" in out
+        assert "file(s) renamed" in out
         assert (out_dir / "Test (2020) [tmdbid-1]" / "Test (2020) [tmdbid-1].mkv").exists()
+
+
+class TestMoviePlanCommand:
+    def test_movie_plan_writes_file(self, tmp_path: Path, capsys):
+        movies_dir = tmp_path / "movies"
+        movies_dir.mkdir()
+        (movies_dir / "movie1.mkv").touch()
+        (movies_dir / "movie2.mp4").touch()
+        plan_file = tmp_path / "plan.yaml"
+
+        main(["movie-plan", str(movies_dir), "-o", str(plan_file)])
+
+        out = capsys.readouterr().out
+        assert "Plan written to" in out
+        assert "2 files listed" in out
+        assert plan_file.exists()
+
+    def test_movie_plan_stdout_no_crash(self, tmp_path: Path):
+        movies_dir = tmp_path / "movies"
+        movies_dir.mkdir()
+        (movies_dir / "movie.mkv").touch()
+
+        ret = main(["movie-plan", str(movies_dir)])
+        assert ret == 0
+
+
+class TestMovieRenamePlanMode:
+    def test_plan_mode_dry_run(self, tmp_path: Path, capsys):
+        movies_dir = tmp_path / "movies"
+        movies_dir.mkdir()
+        (movies_dir / "fc.mkv").write_text("data")
+
+        plan_file = tmp_path / "plan.yaml"
+        plan_file.write_text(
+            f'directory: "{movies_dir}"\n'
+            "files:\n"
+            '  - file: "fc.mkv"\n'
+            "    tmdb_id: 550\n"
+            '    name: "Fight Club"\n'
+            '    year: "1999"\n'
+        )
+
+        main(["movie-rename", "--plan", str(plan_file), "--dry-run"])
+
+        out = capsys.readouterr().out
+        assert "DRY RUN" in out
+        assert "would be renamed" in out
+        assert (movies_dir / "fc.mkv").exists()
+
+    def test_plan_mode_executes(self, tmp_path: Path, capsys):
+        movies_dir = tmp_path / "movies"
+        movies_dir.mkdir()
+        (movies_dir / "fc.mkv").write_text("data")
+
+        plan_file = tmp_path / "plan.yaml"
+        plan_file.write_text(
+            f'directory: "{movies_dir}"\n'
+            "files:\n"
+            '  - file: "fc.mkv"\n'
+            "    tmdb_id: 550\n"
+            '    name: "Fight Club"\n'
+            '    year: "1999"\n'
+        )
+
+        main(["movie-rename", "--plan", str(plan_file)])
+
+        out = capsys.readouterr().out
+        assert "file(s) renamed" in out
+        assert not (movies_dir / "fc.mkv").exists()
+
+        parent = movies_dir.parent
+        movie_dir = parent / "Fight Club (1999) [tmdbid-550]"
+        assert movie_dir.exists()
+        assert (movie_dir / "movie.nfo").exists()

@@ -208,8 +208,8 @@ Fields: `file`, `tmdb_id` (nullable), `name` (nullable), `year` (nullable).
 A null `tmdb_id` means the file is skipped during execution.
 
 **Acceptance:**
-- [ ] Dataclass is defined with all fields.
-- [ ] Nullable fields default to `None`.
+- [x] Dataclass is defined with all fields.
+- [x] Nullable fields default to `None`.
 
 ### 4.2 Add `MoviePlanData` dataclass
 
@@ -218,7 +218,7 @@ A null `tmdb_id` means the file is skipped during execution.
 Fields: `directory`, `files: list[MoviePlanEntry]`, `output` (nullable).
 
 **Acceptance:**
-- [ ] Dataclass is defined with all fields.
+- [x] Dataclass is defined with all fields.
 
 ### 4.3 Add `generate_movie_plan()`
 
@@ -228,9 +228,9 @@ Fields: `directory`, `files: list[MoviePlanEntry]`, `output` (nullable).
 the directory with null TMDB IDs, ready for the operator to fill in.
 
 **Acceptance:**
-- [ ] All media files in the directory appear as entries.
-- [ ] Non-media files are excluded.
-- [ ] All TMDB fields are null in the generated plan.
+- [x] All media files in the directory appear as entries.
+- [x] Non-media files are excluded.
+- [x] All TMDB fields are null in the generated plan.
 
 ### 4.4 Add `write_movie_plan()` and `read_movie_plan()`
 
@@ -240,9 +240,9 @@ YAML serialization matching the TV plan style. Include comments guiding the
 operator to fill in TMDB IDs.
 
 **Acceptance:**
-- [ ] Round-trip write then read produces identical `MoviePlanData`.
-- [ ] Generated YAML includes instructional comments.
-- [ ] Missing required keys in the YAML raise `ValueError`.
+- [x] Round-trip write then read produces identical `MoviePlanData`.
+- [x] Generated YAML includes instructional comments.
+- [x] Missing required keys in the YAML raise `ValueError`.
 
 ### 4.5 Add `movie_plan_to_renames()`
 
@@ -254,9 +254,9 @@ otherwise fetch from TMDB via `client.get_movie()`. Build rename ops.
 Detect collisions.
 
 **Acceptance:**
-- [ ] Entries with null `tmdb_id` are skipped and reported as unmatched.
-- [ ] Entries with `name`/`year` filled in do not call TMDB.
-- [ ] Two entries resolving to the same destination are reported as collisions.
+- [x] Entries with null `tmdb_id` are skipped and reported as unmatched.
+- [x] Entries with `name`/`year` filled in do not call TMDB.
+- [x] Two entries resolving to the same destination are reported as collisions.
 
 ### 4.6 Add `movie-plan` CLI subcommand
 
@@ -266,8 +266,8 @@ Detect collisions.
 directory of movie files.
 
 **Acceptance:**
-- [ ] `movie-plan ./movies -o plan.yaml` writes a valid YAML plan.
-- [ ] Without `-o`, prints to stdout.
+- [x] `movie-plan ./movies -o plan.yaml` writes a valid YAML plan.
+- [x] Without `-o`, prints to stdout.
 
 ### 4.7 Extend `movie-rename` to accept `--plan`
 
@@ -277,9 +277,9 @@ directory of movie files.
 Alternative to single-file mode. Executes the batch plan.
 
 **Acceptance:**
-- [ ] `--plan` and single-file `--id` modes are mutually exclusive.
-- [ ] Batch mode renames all entries with TMDB IDs and writes per-movie NFOs.
-- [ ] `--dry-run` previews all renames.
+- [x] `--plan` and single-file `--id` modes are mutually exclusive.
+- [x] Batch mode renames all entries with TMDB IDs and writes per-movie NFOs.
+- [x] `--dry-run` previews all renames.
 
 ### 4.8 Tests for batch movie planning
 
@@ -289,8 +289,8 @@ Round-trip plan write/read, plan-to-renames with mock TMDB, collision
 detection, CLI integration.
 
 **Acceptance:**
-- [ ] All new functions have test coverage.
-- [ ] `just check` passes.
+- [x] All new functions have test coverage.
+- [x] `just check` passes.
 
 ---
 
