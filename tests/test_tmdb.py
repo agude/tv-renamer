@@ -87,6 +87,62 @@ class TestSearchMovie:
         assert results[0].media_type == "movie"
 
 
+class TestGetMovie:
+    def test_parses_movie_fields(self, client: TMDBClient):
+        client._session.get = MagicMock(
+            return_value=_mock_response(
+                {
+                    "id": 550,
+                    "title": "Fight Club",
+                    "release_date": "1999-10-15",
+                    "overview": "An insomniac office worker...",
+                    "runtime": 139,
+                }
+            )
+        )
+
+        movie = client.get_movie(550)
+
+        assert movie.tmdb_id == 550
+        assert movie.name == "Fight Club"
+        assert movie.release_date == "1999-10-15"
+        assert movie.year == "1999"
+        assert movie.overview == "An insomniac office worker..."
+        assert movie.runtime == 139
+
+    def test_missing_release_date_returns_unknown_year(self, client: TMDBClient):
+        client._session.get = MagicMock(
+            return_value=_mock_response(
+                {
+                    "id": 1,
+                    "title": "Unknown Movie",
+                    "overview": "",
+                    "runtime": None,
+                }
+            )
+        )
+
+        movie = client.get_movie(1)
+
+        assert movie.year == "????"
+        assert movie.runtime is None
+
+    def test_null_runtime(self, client: TMDBClient):
+        client._session.get = MagicMock(
+            return_value=_mock_response(
+                {
+                    "id": 2,
+                    "title": "Test",
+                    "release_date": "2020-01-01",
+                    "overview": "",
+                }
+            )
+        )
+
+        movie = client.get_movie(2)
+        assert movie.runtime is None
+
+
 class TestGetShow:
     def test_parses_show_with_seasons(self, client: TMDBClient):
         client._session.get = MagicMock(

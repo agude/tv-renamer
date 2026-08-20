@@ -52,6 +52,19 @@ class SeasonSummary:
     name: str
 
 
+@dataclass(frozen=True)
+class MovieInfo:
+    tmdb_id: int
+    name: str
+    release_date: str
+    overview: str
+    runtime: int | None
+
+    @property
+    def year(self) -> str:
+        return self.release_date[:4] if self.release_date else "????"
+
+
 class TMDBClient:
     """TMDB API client with rate limiting and session reuse."""
 
@@ -122,6 +135,16 @@ class TMDBClient:
             name=data["name"],
             first_air_date=data.get("first_air_date", ""),
             seasons=seasons,
+        )
+
+    def get_movie(self, tmdb_id: int) -> MovieInfo:
+        data = self._get(f"/movie/{tmdb_id}")
+        return MovieInfo(
+            tmdb_id=data["id"],
+            name=data.get("title", ""),
+            release_date=data.get("release_date", ""),
+            overview=data.get("overview", ""),
+            runtime=data.get("runtime"),
         )
 
     def get_episodes(self, tmdb_id: int, season: int) -> list[Episode]:
