@@ -965,6 +965,21 @@ class TestMoviePlanToRenames:
         mock_client.get_movie.assert_called_once_with(550)
         assert "Fight Club" in str(result.ops[0].dest)
 
+    def test_tmdb_lookup_writes_back_to_entry(self, tmp_path: Path):
+        (tmp_path / "movie.mkv").touch()
+
+        mock_client = MagicMock()
+        mock_client.get_movie.return_value = MovieInfo(
+            tmdb_id=550, name="Fight Club", release_date="1999-10-15", overview="", runtime=139
+        )
+
+        entry = MoviePlanEntry(file="movie.mkv", tmdb_id=550)
+        plan = MoviePlanData(directory=str(tmp_path), files=[entry])
+        movie_plan_to_renames(plan, client=mock_client)
+
+        assert entry.name == "Fight Club"
+        assert entry.year == "1999"
+
     def test_collision_detected(self, tmp_path: Path):
         (tmp_path / "a.mkv").touch()
         (tmp_path / "b.mkv").touch()

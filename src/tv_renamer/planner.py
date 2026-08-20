@@ -358,6 +358,8 @@ def movie_plan_to_renames(plan: MoviePlanData, client: TMDBClient | None = None)
             movie = client.get_movie(entry.tmdb_id)
             name = entry.name or movie.name
             year = entry.year or movie.year
+            entry.name = name
+            entry.year = year
 
         dest = build_movie_path(
             out_root=out_root,

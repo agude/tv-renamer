@@ -345,7 +345,7 @@ def _cmd_movie_rename(args: argparse.Namespace) -> None:
             e.tmdb_id is not None and (e.name is None or e.year is None) for e in plan_data.files
         )
         if needs_lookup:
-            client = args.client
+            client = TMDBClient()
         rename_plan = movie_plan_to_renames(plan_data, client=client)
         print(f"\n  Plan: {args.plan}")
 

@@ -590,6 +590,39 @@ class TestMovieRenamePlanMode:
         assert "would be renamed" in out
         assert (movies_dir / "fc.mkv").exists()
 
+    @patch("tv_renamer.cli.TMDBClient")
+    def test_plan_mode_tmdb_lookup(self, MockClient: MagicMock, tmp_path: Path, capsys):
+        movies_dir = tmp_path / "movies"
+        movies_dir.mkdir()
+        (movies_dir / "fc.mkv").write_text("data")
+
+        plan_file = tmp_path / "plan.yaml"
+        plan_file.write_text(
+            f'directory: "{movies_dir}"\nfiles:\n  - file: "fc.mkv"\n    tmdb_id: 550\n'
+        )
+
+        client = _mock_client(
+            get_movie=MovieInfo(
+                tmdb_id=550,
+                name="Fight Club",
+                release_date="1999-10-15",
+                overview="",
+                runtime=139,
+            ),
+        )
+        MockClient.return_value = client
+        main(["movie-rename", "--plan", str(plan_file)])
+
+        out = capsys.readouterr().out
+        assert "file(s) renamed" in out
+        assert not (movies_dir / "fc.mkv").exists()
+
+        movie_dir = movies_dir.parent / "Fight Club (1999) [tmdbid-550]"
+        assert movie_dir.exists()
+        nfo = movie_dir / "movie.nfo"
+        assert nfo.exists()
+        assert "Fight Club" in nfo.read_text()
+
     def test_plan_mode_executes(self, tmp_path: Path, capsys):
         movies_dir = tmp_path / "movies"
         movies_dir.mkdir()
