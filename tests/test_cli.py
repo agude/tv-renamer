@@ -648,3 +648,35 @@ class TestMovieRenamePlanMode:
         movie_dir = parent / "Fight Club (1999) [tmdbid-550]"
         assert movie_dir.exists()
         assert (movie_dir / "movie.nfo").exists()
+
+    def test_plan_mode_partial_failure_flushes_log(self, tmp_path: Path, capsys):
+        movies_dir = tmp_path / "movies"
+        movies_dir.mkdir()
+        (movies_dir / "a.mkv").write_text("data1")
+        (movies_dir / "b.mkv").write_text("data2")
+
+        plan_file = tmp_path / "plan.yaml"
+        plan_file.write_text(
+            f'directory: "{movies_dir}"\n'
+            "files:\n"
+            '  - file: "a.mkv"\n'
+            "    tmdb_id: 1\n"
+            '    name: "Movie A"\n'
+            '    year: "2020"\n'
+            '  - file: "b.mkv"\n'
+            "    tmdb_id: 2\n"
+            '    name: "Movie B"\n'
+            '    year: "2021"\n'
+        )
+
+        dest_dir = movies_dir.parent / "Movie B (2021) [tmdbid-2]"
+        dest_dir.mkdir(parents=True)
+        (dest_dir / "Movie B (2021) [tmdbid-2].mkv").write_text("existing")
+
+        log = tmp_path / "changes.log"
+        ret = main(["movie-rename", "--plan", str(plan_file), "--log", str(log)])
+        assert ret == 1
+
+        assert log.exists()
+        log_text = log.read_text()
+        assert "Movie A" in log_text

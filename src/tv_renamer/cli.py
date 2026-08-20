@@ -290,6 +290,12 @@ def _cmd_movie_plan(args: argparse.Namespace) -> None:
         write_movie_plan(plan_data, Path("/dev/stdout"))
 
 
+def _flush_movie_log(log_path: Path | None, lines: list[str]) -> None:
+    if log_path and lines:
+        with log_path.open("a") as f:
+            f.writelines(lines)
+
+
 def _execute_movie_ops(
     ops: list[tuple[str, str, int, str]],
     *,
@@ -314,16 +320,24 @@ def _execute_movie_ops(
         if not dry_run:
             dest.parent.mkdir(parents=True, exist_ok=True)
             if dest.exists():
-                raise FileExistsError(f"Destination already exists: {dest}")
-            shutil.move(str(source), str(dest))
+                _flush_movie_log(log_path, log_lines)
+                raise FileExistsError(
+                    f"Destination already exists: {source} -> {dest}; "
+                    f"{count} of {len(ops)} files already moved"
+                )
+            try:
+                shutil.move(str(source), str(dest))
+            except OSError:
+                _flush_movie_log(log_path, log_lines)
+                raise OSError(
+                    f"Failed to move {source} -> {dest}; {count} of {len(ops)} files already moved"
+                ) from None
             nfo = write_movie_nfo(dest.parent, movie_name, tmdb_id)
             log_lines.append(f"{source} -> {dest}\n")
             log_lines.append(f"wrote {nfo}\n")
             count += 1
 
-    if log_path and log_lines:
-        with log_path.open("a") as f:
-            f.writelines(log_lines)
+    _flush_movie_log(log_path, log_lines)
 
     if dry_run:
         print(f"\n  {len(ops)} file(s) would be renamed.")
