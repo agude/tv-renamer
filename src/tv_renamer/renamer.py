@@ -77,14 +77,26 @@ def _truncate_filename(filename: str) -> str:
     return truncated + ext
 
 
+def _truncate_with_suffix(name: str, suffix: str) -> str:
+    """Truncate name so that name + suffix fits within 255 UTF-8 bytes."""
+    full = f"{name}{suffix}"
+    if len(full.encode("utf-8")) <= _MAX_FILENAME_BYTES:
+        return full
+    budget = _MAX_FILENAME_BYTES - len(suffix.encode("utf-8"))
+    truncated = name.encode("utf-8")[:budget].decode("utf-8", errors="ignore").rstrip()
+    return f"{truncated}{suffix}"
+
+
 def show_dir_name(show_name: str, year: str, tmdb_id: int) -> str:
     safe_show = _safe_name(show_name)
-    return f"{safe_show} ({year}) [tmdbid-{tmdb_id}]"
+    suffix = f" ({year}) [tmdbid-{tmdb_id}]"
+    return _truncate_with_suffix(safe_show, suffix)
 
 
 def movie_dir_name(movie_name: str, year: str, tmdb_id: int) -> str:
     safe_name = _safe_name(movie_name)
-    return f"{safe_name} ({year}) [tmdbid-{tmdb_id}]"
+    suffix = f" ({year}) [tmdbid-{tmdb_id}]"
+    return _truncate_with_suffix(safe_name, suffix)
 
 
 def build_movie_path(

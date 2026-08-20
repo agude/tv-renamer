@@ -588,6 +588,16 @@ class TestShowDirName:
         assert ":" not in result
         assert "[tmdbid-1]" in result
 
+    def test_long_ascii_name_truncated(self):
+        result = show_dir_name("A" * 300, "2020", 1)
+        assert len(result.encode("utf-8")) <= 255
+        assert result.endswith("[tmdbid-1]")
+
+    def test_long_cjk_name_truncated(self):
+        result = show_dir_name("死神" * 100, "2020", 1)
+        assert len(result.encode("utf-8")) <= 255
+        assert result.endswith("[tmdbid-1]")
+
 
 class TestPlanRenamesKeywordOnly:
     def test_positional_args_raise_type_error(self, tmp_path: Path):
@@ -756,6 +766,11 @@ class TestMovieDirName:
         result = movie_dir_name("Movie: The Sequel", "2020", 1)
         assert ":" not in result
         assert "[tmdbid-1]" in result
+
+    def test_long_name_truncated(self):
+        result = movie_dir_name("A" * 300, "2020", 1)
+        assert len(result.encode("utf-8")) <= 255
+        assert result.endswith("[tmdbid-1]")
 
 
 class TestBuildMoviePath:
