@@ -39,6 +39,14 @@ _NFO_TEMPLATE = """\
 </tvshow>
 """
 
+_MOVIE_NFO_TEMPLATE = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>{title}</title>
+  <tmdbid>{tmdb_id}</tmdbid>
+</movie>
+"""
+
 _MAX_FILENAME_BYTES = 255
 
 
@@ -72,6 +80,53 @@ def _truncate_filename(filename: str) -> str:
 def show_dir_name(show_name: str, year: str, tmdb_id: int) -> str:
     safe_show = _safe_name(show_name)
     return f"{safe_show} ({year}) [tmdbid-{tmdb_id}]"
+
+
+def movie_dir_name(movie_name: str, year: str, tmdb_id: int) -> str:
+    safe_name = _safe_name(movie_name)
+    return f"{safe_name} ({year}) [tmdbid-{tmdb_id}]"
+
+
+def build_movie_path(
+    *,
+    out_root: Path,
+    movie_name: str,
+    year: str,
+    tmdb_id: int,
+    extension: str,
+) -> Path:
+    dir_name = movie_dir_name(movie_name, year, tmdb_id)
+    filename = _truncate_filename(f"{dir_name}{extension}")
+    return out_root / dir_name / filename
+
+
+def write_movie_nfo(movie_dir: Path, movie_name: str, tmdb_id: int) -> Path:
+    if not isinstance(tmdb_id, int):
+        raise TypeError(f"tmdb_id must be int, got {type(tmdb_id).__name__}")
+    nfo_path = movie_dir / "movie.nfo"
+    nfo_path.write_text(_MOVIE_NFO_TEMPLATE.format(title=escape(movie_name), tmdb_id=tmdb_id))
+    return nfo_path
+
+
+def plan_movie_rename(
+    file: Path,
+    *,
+    movie_name: str,
+    year: str,
+    tmdb_id: int,
+    output: Path | None = None,
+) -> RenameOp:
+    if not file.exists():
+        raise FileNotFoundError(f"Source file does not exist: {file}")
+    out_root = output or file.parent
+    dest = build_movie_path(
+        out_root=out_root,
+        movie_name=movie_name,
+        year=year,
+        tmdb_id=tmdb_id,
+        extension=file.suffix,
+    )
+    return RenameOp(source=file, dest=dest)
 
 
 def build_episode_path(

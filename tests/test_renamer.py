@@ -10,11 +10,15 @@ from tv_renamer.renamer import (
     RenamePlan,
     _safe_name,
     _truncate_filename,
+    build_movie_path,
     execute_renames,
+    movie_dir_name,
     parse_log,
+    plan_movie_rename,
     plan_renames,
     show_dir_name,
     undo_renames,
+    write_movie_nfo,
     write_nfo,
 )
 from tv_renamer.tmdb import Episode
@@ -712,3 +716,94 @@ class TestPlanRenamesMultiSeason:
         assert len(plan.ops) == 2
         assert all("Season 3" in str(op.dest) for op in plan.ops)
         assert all("S03E" in op.dest.name for op in plan.ops)
+
+
+class TestMovieDirName:
+    def test_standard_format(self):
+        assert movie_dir_name("Fight Club", "1999", 550) == "Fight Club (1999) [tmdbid-550]"
+
+    def test_unsafe_chars_sanitized(self):
+        result = movie_dir_name("Movie: The Sequel", "2020", 1)
+        assert ":" not in result
+        assert "[tmdbid-1]" in result
+
+
+class TestBuildMoviePath:
+    def test_standard_path(self):
+        path = build_movie_path(
+            out_root=Path("/out"),
+            movie_name="Fight Club",
+            year="1999",
+            tmdb_id=550,
+            extension=".mkv",
+        )
+        assert path == Path(
+            "/out/Fight Club (1999) [tmdbid-550]/Fight Club (1999) [tmdbid-550].mkv"
+        )
+
+    def test_extension_preserved(self):
+        path = build_movie_path(
+            out_root=Path("/out"),
+            movie_name="Test",
+            year="2020",
+            tmdb_id=1,
+            extension=".mp4",
+        )
+        assert path.suffix == ".mp4"
+
+    def test_long_name_truncated(self):
+        long_name = "A" * 300
+        path = build_movie_path(
+            out_root=Path("/out"),
+            movie_name=long_name,
+            year="2020",
+            tmdb_id=1,
+            extension=".mkv",
+        )
+        assert len(path.name.encode("utf-8")) <= 255
+
+
+class TestWriteMovieNfo:
+    def test_filename_is_movie_nfo(self, tmp_path: Path):
+        nfo = write_movie_nfo(tmp_path, "Fight Club", 550)
+        assert nfo.name == "movie.nfo"
+
+    def test_xml_content(self, tmp_path: Path):
+        nfo = write_movie_nfo(tmp_path, "Fight Club", 550)
+        tree = ET.parse(nfo)
+        root = tree.getroot()
+        assert root.tag == "movie"
+        assert root.findtext("title") == "Fight Club"
+        assert root.findtext("tmdbid") == "550"
+
+    def test_xml_escape_applied(self, tmp_path: Path):
+        nfo = write_movie_nfo(tmp_path, "Tom & Jerry <Classic>", 42)
+        tree = ET.parse(nfo)
+        root = tree.getroot()
+        assert root.findtext("title") == "Tom & Jerry <Classic>"
+
+
+class TestPlanMovieRename:
+    def test_returns_correct_op(self, tmp_path: Path):
+        movie = tmp_path / "fight_club.mkv"
+        movie.write_text("data")
+
+        op = plan_movie_rename(movie, movie_name="Fight Club", year="1999", tmdb_id=550)
+
+        assert op.source == movie
+        assert "Fight Club (1999) [tmdbid-550]" in str(op.dest)
+        assert op.dest.suffix == ".mkv"
+
+    def test_raises_if_source_missing(self, tmp_path: Path):
+        missing = tmp_path / "nonexistent.mkv"
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            plan_movie_rename(missing, movie_name="Test", year="2020", tmdb_id=1)
+
+    def test_custom_output(self, tmp_path: Path):
+        movie = tmp_path / "movie.mkv"
+        movie.write_text("data")
+        out = tmp_path / "output"
+
+        op = plan_movie_rename(movie, movie_name="Test", year="2020", tmdb_id=1, output=out)
+
+        assert str(op.dest).startswith(str(out))

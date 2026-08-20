@@ -83,9 +83,9 @@ Keeping them separate is safer if TV and movie Jellyfin conventions ever
 diverge.
 
 **Acceptance:**
-- [ ] `movie_dir_name("Fight Club", "1999", 550)` returns
+- [x] `movie_dir_name("Fight Club", "1999", 550)` returns
       `"Fight Club (1999) [tmdbid-550]"`.
-- [ ] Characters unsafe for filenames are sanitized.
+- [x] Characters unsafe for filenames are sanitized.
 
 ### 2.2 Add `build_movie_path()`
 
@@ -95,9 +95,9 @@ diverge.
 `out_root / dir_name / "Name (Year) [tmdbid-N].ext"`. No season subfolder.
 
 **Acceptance:**
-- [ ] Returns `root/Fight Club (1999) [tmdbid-550]/Fight Club (1999) [tmdbid-550].mkv`.
-- [ ] Extension is preserved from the source file.
-- [ ] Long movie names are truncated to fit 255 UTF-8 bytes.
+- [x] Returns `root/Fight Club (1999) [tmdbid-550]/Fight Club (1999) [tmdbid-550].mkv`.
+- [x] Extension is preserved from the source file.
+- [x] Long movie names are truncated to fit 255 UTF-8 bytes.
 
 ### 2.3 Add movie NFO support
 
@@ -108,9 +108,9 @@ Add `_MOVIE_NFO_TEMPLATE` with `<movie>` root element containing `<title>` and
 `movie.nfo` (not `tvshow.nfo`).
 
 **Acceptance:**
-- [ ] NFO file is named `movie.nfo`.
-- [ ] XML-escape is applied to the title.
-- [ ] Output parses as valid XML with correct elements.
+- [x] NFO file is named `movie.nfo`.
+- [x] XML-escape is applied to the title.
+- [x] Output parses as valid XML with correct elements.
 
 ### 2.4 Add `plan_movie_rename()`
 
@@ -121,8 +121,8 @@ Single-file rename planning for one movie. Validates the source file exists
 and has a media extension.
 
 **Acceptance:**
-- [ ] Returns a `RenameOp` with correct source and dest.
-- [ ] Raises if the source file does not exist.
+- [x] Returns a `RenameOp` with correct source and dest.
+- [x] Raises if the source file does not exist.
 
 ### 2.5 Tests for movie rename paths
 
@@ -132,9 +132,9 @@ Test `movie_dir_name` sanitization, `build_movie_path` output structure,
 `write_movie_nfo` XML content, and `plan_movie_rename` source/dest pair.
 
 **Acceptance:**
-- [ ] All new functions have test coverage.
-- [ ] All existing renamer tests still pass.
-- [ ] `just check` passes.
+- [x] All new functions have test coverage.
+- [x] All existing renamer tests still pass.
+- [x] `just check` passes.
 
 ---
 
