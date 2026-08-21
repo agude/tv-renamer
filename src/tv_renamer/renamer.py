@@ -21,6 +21,14 @@ class RenameOp:
 
 
 @dataclass(frozen=True)
+class MovieRenameOp:
+    source: Path
+    dest: Path
+    movie_name: str
+    tmdb_id: int
+
+
+@dataclass(frozen=True)
 class RenamePlan:
     ops: list[RenameOp]
     unmatched: list[Path]
@@ -344,6 +352,44 @@ def execute_renames(
         for sd in show_dirs:
             nfo = write_nfo(sd, show_name, tmdb_id)
             log_lines.append(f"wrote {nfo}\n")
+
+    _flush_log(log_path, log_lines)
+
+    return count
+
+
+def execute_movie_renames(
+    ops: list[MovieRenameOp],
+    *,
+    log_path: Path | None = None,
+) -> int:
+    """Execute movie rename operations. Returns count of files renamed.
+
+    Writes a movie.nfo in each movie directory after moving the file.
+    """
+    count = 0
+    log_lines: list[str] = []
+
+    for op in ops:
+        if op.dest.exists():
+            _flush_log(log_path, log_lines)
+            raise FileExistsError(
+                f"Destination already exists: {op.source} -> {op.dest}; "
+                f"{count} of {len(ops)} files already moved"
+            )
+        op.dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.move(str(op.source), str(op.dest))
+        except OSError:
+            _flush_log(log_path, log_lines)
+            raise OSError(
+                f"Failed to move {op.source} -> {op.dest}; "
+                f"{count} of {len(ops)} files already moved"
+            ) from None
+        nfo = write_movie_nfo(op.dest.parent, op.movie_name, op.tmdb_id)
+        log_lines.append(f"{op.source} -> {op.dest}\n")
+        log_lines.append(f"wrote {nfo}\n")
+        count += 1
 
     _flush_log(log_path, log_lines)
 

@@ -7,11 +7,13 @@ from unittest.mock import patch
 import pytest
 
 from tv_renamer.renamer import (
+    MovieRenameOp,
     RenamePlan,
     _safe_name,
     _safe_year,
     _truncate_filename,
     build_movie_path,
+    execute_movie_renames,
     execute_renames,
     movie_dir_name,
     parse_log,
@@ -917,3 +919,92 @@ class TestPlanMovieRename:
         op = plan_movie_rename(movie, movie_name="Test", year="2020", tmdb_id=1, output=out)
 
         assert str(op.dest).startswith(str(out))
+
+
+class TestExecuteMovieRenames:
+    def test_moves_file_and_writes_nfo(self, tmp_path: Path):
+        movie = tmp_path / "fc.mkv"
+        movie.write_text("movie data")
+        dest = (
+            tmp_path
+            / "out"
+            / "Fight Club (1999) [tmdbid-550]"
+            / "Fight Club (1999) [tmdbid-550].mkv"
+        )
+
+        op = MovieRenameOp(source=movie, dest=dest, movie_name="Fight Club", tmdb_id=550)
+        count = execute_movie_renames([op])
+
+        assert count == 1
+        assert dest.exists()
+        assert not movie.exists()
+        nfo = dest.parent / "movie.nfo"
+        assert nfo.exists()
+        assert "<tmdbid>550</tmdbid>" in nfo.read_text()
+
+    def test_writes_log(self, tmp_path: Path):
+        movie = tmp_path / "fc.mkv"
+        movie.write_text("data")
+        dest = tmp_path / "out" / "FC" / "FC.mkv"
+        log = tmp_path / "changes.log"
+
+        op = MovieRenameOp(source=movie, dest=dest, movie_name="FC", tmdb_id=1)
+        execute_movie_renames([op], log_path=log)
+
+        log_text = log.read_text()
+        assert " -> " in log_text
+        assert "wrote " in log_text
+
+    def test_refuses_overwrite(self, tmp_path: Path):
+        movie = tmp_path / "fc.mkv"
+        movie.write_text("original")
+        dest = tmp_path / "out" / "FC.mkv"
+        dest.parent.mkdir(parents=True)
+        dest.write_text("existing")
+
+        op = MovieRenameOp(source=movie, dest=dest, movie_name="FC", tmdb_id=1)
+        with pytest.raises(FileExistsError, match="Destination already exists"):
+            execute_movie_renames([op])
+
+        assert movie.exists()
+        assert dest.read_text() == "existing"
+
+    def test_partial_failure_flushes_log(self, tmp_path: Path):
+        m1 = tmp_path / "a.mkv"
+        m1.write_text("data1")
+        m2 = tmp_path / "b.mkv"
+        m2.write_text("data2")
+        d1 = tmp_path / "out" / "A" / "A.mkv"
+        d2 = tmp_path / "out" / "B" / "B.mkv"
+        log = tmp_path / "changes.log"
+
+        d2.parent.mkdir(parents=True)
+        d2.write_text("blocker")
+
+        ops = [
+            MovieRenameOp(source=m1, dest=d1, movie_name="A", tmdb_id=1),
+            MovieRenameOp(source=m2, dest=d2, movie_name="B", tmdb_id=2),
+        ]
+
+        with pytest.raises(FileExistsError):
+            execute_movie_renames(ops, log_path=log)
+
+        log_text = log.read_text()
+        assert log_text.count(" -> ") == 1
+        assert "wrote " in log_text
+
+    def test_undo_round_trip(self, tmp_path: Path):
+        movie = tmp_path / "fc.mkv"
+        movie.write_text("movie data")
+        dest = tmp_path / "out" / "FC" / "FC.mkv"
+        log = tmp_path / "changes.log"
+
+        op = MovieRenameOp(source=movie, dest=dest, movie_name="FC", tmdb_id=1)
+        execute_movie_renames([op], log_path=log)
+
+        undo_plan = parse_log(log)
+        undo_renames(undo_plan)
+
+        assert movie.exists()
+        assert movie.read_text() == "movie data"
+        assert not dest.parent.exists()

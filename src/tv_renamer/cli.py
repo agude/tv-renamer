@@ -22,12 +22,13 @@ from tv_renamer.planner import (
     write_plan,
 )
 from tv_renamer.renamer import (
+    MovieRenameOp,
+    execute_movie_renames,
     execute_renames,
     parse_log,
     plan_movie_rename,
     plan_renames,
     undo_renames,
-    write_movie_nfo,
 )
 from tv_renamer.scanner import scan_directory
 from tv_renamer.tmdb import TMDBClient
@@ -290,59 +291,11 @@ def _cmd_movie_plan(args: argparse.Namespace) -> None:
         write_movie_plan(plan_data, Path("/dev/stdout"))
 
 
-def _flush_movie_log(log_path: Path | None, lines: list[str]) -> None:
-    if log_path and lines:
-        with log_path.open("a") as f:
-            f.writelines(lines)
-
-
-def _execute_movie_ops(
-    ops: list[tuple[str, str, int, str]],
-    *,
-    dry_run: bool,
-    log_path: Path | None,
-) -> None:
-    """Execute or preview movie rename ops.
-
-    Each op is (source, dest, tmdb_id, movie_name) from the rename plan.
-    """
-    import shutil
-
-    log_lines: list[str] = []
-    count = 0
-    for source_str, dest_str, tmdb_id, movie_name in ops:
-        source = Path(source_str)
-        dest = Path(dest_str)
-        label = "[DRY RUN] " if dry_run else ""
-        print(f"  {label}{source.name}")
-        print(f"    -> {dest}")
-
-        if not dry_run:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            if dest.exists():
-                _flush_movie_log(log_path, log_lines)
-                raise FileExistsError(
-                    f"Destination already exists: {source} -> {dest}; "
-                    f"{count} of {len(ops)} files already moved"
-                )
-            try:
-                shutil.move(str(source), str(dest))
-            except OSError:
-                _flush_movie_log(log_path, log_lines)
-                raise OSError(
-                    f"Failed to move {source} -> {dest}; {count} of {len(ops)} files already moved"
-                ) from None
-            nfo = write_movie_nfo(dest.parent, movie_name, tmdb_id)
-            log_lines.append(f"{source} -> {dest}\n")
-            log_lines.append(f"wrote {nfo}\n")
-            count += 1
-
-    _flush_movie_log(log_path, log_lines)
-
-    if dry_run:
-        print(f"\n  {len(ops)} file(s) would be renamed.")
-    else:
-        print(f"\n  {count} file(s) renamed.")
+def _print_movie_ops(ops: list[MovieRenameOp], *, dry_run: bool) -> None:
+    label = "[DRY RUN] " if dry_run else ""
+    for op in ops:
+        print(f"  {label}{op.source.name}")
+        print(f"    -> {op.dest}")
 
 
 def _cmd_movie_rename(args: argparse.Namespace) -> None:
@@ -373,10 +326,15 @@ def _cmd_movie_rename(args: argparse.Namespace) -> None:
             sys.exit(1)
 
         active_entries = [e for e in plan_data.files if e.tmdb_id is not None]
-        ops_with_meta: list[tuple[str, str, int, str]] = []
+        movie_ops: list[MovieRenameOp] = []
         for op, entry in zip(rename_plan.ops, active_entries, strict=True):
-            ops_with_meta.append(
-                (str(op.source), str(op.dest), entry.tmdb_id, entry.name or "")  # type: ignore[arg-type]
+            movie_ops.append(
+                MovieRenameOp(
+                    source=op.source,
+                    dest=op.dest,
+                    movie_name=entry.name or "",
+                    tmdb_id=entry.tmdb_id,  # type: ignore[arg-type]
+                )
             )
 
         if rename_plan.unmatched:
@@ -384,7 +342,12 @@ def _cmd_movie_rename(args: argparse.Namespace) -> None:
             for p in rename_plan.unmatched:
                 print(f"    {p.name}")
 
-        _execute_movie_ops(ops_with_meta, dry_run=dry_run, log_path=log_path)
+        _print_movie_ops(movie_ops, dry_run=dry_run)
+        if dry_run:
+            print(f"\n  {len(movie_ops)} file(s) would be renamed.")
+        else:
+            count = execute_movie_renames(movie_ops, log_path=log_path)
+            print(f"\n  {count} file(s) renamed.")
     else:
         if not args.file or args.id is None:
             print("error: provide either --plan or both file and --id", file=sys.stderr)
@@ -402,11 +365,18 @@ def _cmd_movie_rename(args: argparse.Namespace) -> None:
             output=output,
         )
 
-        _execute_movie_ops(
-            [(str(op.source), str(op.dest), movie.tmdb_id, movie.name)],
-            dry_run=dry_run,
-            log_path=log_path,
+        movie_op = MovieRenameOp(
+            source=op.source,
+            dest=op.dest,
+            movie_name=movie.name,
+            tmdb_id=movie.tmdb_id,
         )
+        _print_movie_ops([movie_op], dry_run=dry_run)
+        if dry_run:
+            print("\n  1 file(s) would be renamed.")
+        else:
+            count = execute_movie_renames([movie_op], log_path=log_path)
+            print(f"\n  {count} file(s) renamed.")
 
 
 def _http_message(exc: HTTPError) -> str:
