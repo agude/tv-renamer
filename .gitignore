@@ -15,5 +15,8 @@ build/
 # Run artifacts
 *.log
 
+# Planning docs
+plan.md
+
 # uv — .venv is local; uv.lock is committed (do not add it here)
 .venv/
