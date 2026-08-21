@@ -9,6 +9,7 @@ import pytest
 from tv_renamer.renamer import (
     RenamePlan,
     _safe_name,
+    _safe_year,
     _truncate_filename,
     build_movie_path,
     execute_renames,
@@ -579,6 +580,20 @@ class TestPlanRenamesSpecials:
         assert "S01E01" in plan.ops[0].dest.name
 
 
+class TestSafeYear:
+    def test_normal_year_unchanged(self):
+        assert _safe_year("2020") == "2020"
+
+    def test_question_marks_removed(self):
+        assert _safe_year("????") == ""
+
+    def test_empty_string_unchanged(self):
+        assert _safe_year("") == ""
+
+    def test_mixed_digits_and_unsafe(self):
+        assert _safe_year("20??") == "20"
+
+
 class TestShowDirName:
     def test_standard_format(self):
         assert show_dir_name("Test Show", "2020", 99999) == "Test Show (2020) [tmdbid-99999]"
@@ -597,6 +612,15 @@ class TestShowDirName:
         result = show_dir_name("死神" * 100, "2020", 1)
         assert len(result.encode("utf-8")) <= 255
         assert result.endswith("[tmdbid-1]")
+
+    def test_unknown_year_omitted(self):
+        result = show_dir_name("Show", "????", 1)
+        assert "?" not in result
+        assert result == "Show [tmdbid-1]"
+
+    def test_empty_year_omitted(self):
+        result = show_dir_name("Show", "", 1)
+        assert result == "Show [tmdbid-1]"
 
 
 class TestPlanRenamesKeywordOnly:
@@ -797,6 +821,15 @@ class TestMovieDirName:
         result = movie_dir_name("A" * 300, "2020", 1)
         assert len(result.encode("utf-8")) <= 255
         assert result.endswith("[tmdbid-1]")
+
+    def test_unknown_year_omitted(self):
+        result = movie_dir_name("Movie", "????", 1)
+        assert "?" not in result
+        assert result == "Movie [tmdbid-1]"
+
+    def test_empty_year_omitted(self):
+        result = movie_dir_name("Movie", "", 1)
+        assert result == "Movie [tmdbid-1]"
 
 
 class TestBuildMoviePath:

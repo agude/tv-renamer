@@ -87,16 +87,21 @@ def _truncate_with_suffix(name: str, suffix: str) -> str:
     return f"{truncated}{suffix}"
 
 
+def _safe_year(year: str) -> str:
+    return _DELETE.sub("", year)
+
+
+def _year_suffix(year: str, tmdb_id: int) -> str:
+    sanitized = _safe_year(year)
+    return f" ({sanitized}) [tmdbid-{tmdb_id}]" if sanitized else f" [tmdbid-{tmdb_id}]"
+
+
 def show_dir_name(show_name: str, year: str, tmdb_id: int) -> str:
-    safe_show = _safe_name(show_name)
-    suffix = f" ({year}) [tmdbid-{tmdb_id}]"
-    return _truncate_with_suffix(safe_show, suffix)
+    return _truncate_with_suffix(_safe_name(show_name), _year_suffix(year, tmdb_id))
 
 
 def movie_dir_name(movie_name: str, year: str, tmdb_id: int) -> str:
-    safe_name = _safe_name(movie_name)
-    suffix = f" ({year}) [tmdbid-{tmdb_id}]"
-    return _truncate_with_suffix(safe_name, suffix)
+    return _truncate_with_suffix(_safe_name(movie_name), _year_suffix(year, tmdb_id))
 
 
 def build_movie_path(
