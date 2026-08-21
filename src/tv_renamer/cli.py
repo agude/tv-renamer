@@ -478,9 +478,13 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         needs_client = getattr(args, "needs_client", False)
-        if args.command == "rename" and not args.plan:
+        if args.command == "rename" and not args.plan and args.id is not None:
             needs_client = True
-        if args.command == "movie-rename" and not getattr(args, "plan", None):
+        if (
+            args.command == "movie-rename"
+            and not getattr(args, "plan", None)
+            and getattr(args, "id", None) is not None
+        ):
             needs_client = True
         if needs_client:
             args.client = TMDBClient()
