@@ -215,6 +215,8 @@ def plan_to_renames(plan: PlanData, *, output_override: Path | None = None) -> R
     resolving to the same destination) are detected and reported.
     """
     directory = Path(plan.directory)
+    if not directory.is_dir():
+        raise FileNotFoundError(f"Plan directory does not exist: {directory}")
     out_root = output_override or (Path(plan.output) if plan.output else directory.parent)
 
     ops: list[RenameOp] = []
@@ -225,6 +227,8 @@ def plan_to_renames(plan: PlanData, *, output_override: Path | None = None) -> R
         if entry.season is None or entry.episode is None:
             skipped.append(source)
             continue
+        if not source.exists():
+            raise FileNotFoundError(f"Source file in plan does not exist: {source}")
 
         dest = build_episode_path(
             out_root=out_root,
@@ -338,6 +342,8 @@ def read_movie_plan(path: Path) -> MoviePlanData:
 
 def movie_plan_to_renames(plan: MoviePlanData, client: TMDBClient | None = None) -> RenamePlan:
     directory = Path(plan.directory)
+    if not directory.is_dir():
+        raise FileNotFoundError(f"Plan directory does not exist: {directory}")
     out_root = Path(plan.output) if plan.output else directory.parent
 
     ops: list[RenameOp] = []
@@ -348,6 +354,8 @@ def movie_plan_to_renames(plan: MoviePlanData, client: TMDBClient | None = None)
         if entry.tmdb_id is None:
             skipped.append(source)
             continue
+        if not source.exists():
+            raise FileNotFoundError(f"Source file in plan does not exist: {source}")
 
         if entry.name is not None and entry.year is not None:
             name = entry.name

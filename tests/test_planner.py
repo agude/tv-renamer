@@ -697,6 +697,51 @@ class TestPlanToRenames:
         assert "Season 1" in str(result.ops[0].dest)
         assert "Season 2" in str(result.ops[1].dest)
 
+    def test_missing_source_file_raises(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+
+        plan = PlanData(
+            show="Show",
+            tmdb_id=1,
+            year="2020",
+            directory=str(src),
+            files=[PlanEntry(file="nonexistent.mp4", season=1, episode=1, title="Pilot")],
+        )
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            plan_to_renames(plan)
+
+    def test_missing_directory_raises(self, tmp_path: Path):
+        plan = PlanData(
+            show="Show",
+            tmdb_id=1,
+            year="2020",
+            directory=str(tmp_path / "nonexistent"),
+            files=[PlanEntry(file="ep.mp4", season=1, episode=1, title="Pilot")],
+        )
+        with pytest.raises(FileNotFoundError, match="directory does not exist"):
+            plan_to_renames(plan)
+
+    def test_skipped_entries_not_checked_for_existence(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "ep.mp4").touch()
+
+        plan = PlanData(
+            show="Show",
+            tmdb_id=1,
+            year="2020",
+            directory=str(src),
+            files=[
+                PlanEntry(file="ep.mp4", season=1, episode=1, title="Pilot"),
+                PlanEntry(file="ghost.mkv"),
+            ],
+        )
+        result = plan_to_renames(plan)
+
+        assert len(result.ops) == 1
+        assert len(result.unmatched) == 1
+
 
 class TestEndToEnd:
     """Full round-trip: generate -> write -> read -> execute."""
@@ -994,3 +1039,38 @@ class TestMoviePlanToRenames:
         result = movie_plan_to_renames(plan)
 
         assert len(result.collisions) == 1
+
+    def test_missing_source_file_raises(self, tmp_path: Path):
+        plan = MoviePlanData(
+            directory=str(tmp_path),
+            files=[
+                MoviePlanEntry(file="nonexistent.mkv", tmdb_id=550, name="Fight Club", year="1999"),
+            ],
+        )
+        with pytest.raises(FileNotFoundError, match="does not exist"):
+            movie_plan_to_renames(plan)
+
+    def test_missing_directory_raises(self, tmp_path: Path):
+        plan = MoviePlanData(
+            directory=str(tmp_path / "nonexistent"),
+            files=[
+                MoviePlanEntry(file="fc.mkv", tmdb_id=550, name="Fight Club", year="1999"),
+            ],
+        )
+        with pytest.raises(FileNotFoundError, match="directory does not exist"):
+            movie_plan_to_renames(plan)
+
+    def test_skipped_entries_not_checked_for_existence(self, tmp_path: Path):
+        (tmp_path / "real.mkv").touch()
+
+        plan = MoviePlanData(
+            directory=str(tmp_path),
+            files=[
+                MoviePlanEntry(file="real.mkv", tmdb_id=550, name="Fight Club", year="1999"),
+                MoviePlanEntry(file="ghost.mkv"),
+            ],
+        )
+        result = movie_plan_to_renames(plan)
+
+        assert len(result.ops) == 1
+        assert len(result.unmatched) == 1
