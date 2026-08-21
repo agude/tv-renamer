@@ -70,4 +70,4 @@ jobs:
       - name: Smoke test
         run: |
           uv pip install .
-          uv run tv_renamer --help
+          uv run tv-renamer --help
