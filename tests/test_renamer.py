@@ -903,6 +903,12 @@ class TestPlanMovieRename:
         with pytest.raises(FileNotFoundError, match="does not exist"):
             plan_movie_rename(missing, movie_name="Test", year="2020", tmdb_id=1)
 
+    def test_raises_if_not_media_file(self, tmp_path: Path):
+        txt = tmp_path / "notes.txt"
+        txt.write_text("data")
+        with pytest.raises(ValueError, match="Not a recognized media"):
+            plan_movie_rename(txt, movie_name="Test", year="2020", tmdb_id=1)
+
     def test_custom_output(self, tmp_path: Path):
         movie = tmp_path / "movie.mkv"
         movie.write_text("data")

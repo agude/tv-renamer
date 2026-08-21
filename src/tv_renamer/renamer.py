@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from xml.sax.saxutils import escape
 
+from tv_renamer.constants import MEDIA_EXTENSIONS
 from tv_renamer.matcher import match_files
 from tv_renamer.tmdb import Episode
 
@@ -135,6 +136,8 @@ def plan_movie_rename(
 ) -> RenameOp:
     if not file.exists():
         raise FileNotFoundError(f"Source file does not exist: {file}")
+    if file.suffix.lower() not in MEDIA_EXTENSIONS:
+        raise ValueError(f"Not a recognized media file: {file}")
     out_root = output or file.parent
     dest = build_movie_path(
         out_root=out_root,
