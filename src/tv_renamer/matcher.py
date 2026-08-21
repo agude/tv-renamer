@@ -38,6 +38,9 @@ _RESOLUTION_HEIGHTS = frozenset({480, 576, 720, 1080, 1440, 2160})
 # EP prefix: common in CJK rips ("美少女戰士Crystal_EP01 阿兔.mp4")
 _EP_PREFIX = re.compile(r"(?<![A-Za-z])EP\.?(\d{1,4})(?!\d)", re.IGNORECASE)
 
+# CJK episode suffix: number followed by 集/话/話/回 ("鬼灭之刃粤语1集.ts")
+_CJK_SUFFIX = re.compile(r"(?<!\d)(\d{1,4})[集话話回]")
+
 # Bare number: leading ("01 - title.mp4") or trailing after non-digit chars ("死神粤语01.ts")
 _BARE_LEADING = re.compile(r"^(\d{1,4})")
 _BARE_TRAILING = re.compile(r"(?<!\d)(\d{1,4})$")
@@ -69,6 +72,12 @@ def extract_episode(
         num = int(m.group(1))
         if num > 0:
             return None, num, None, "ep_prefix"
+
+    m = _CJK_SUFFIX.search(filename)
+    if m:
+        num = int(m.group(1))
+        if num > 0:
+            return None, num, None, "cjk_suffix"
 
     m = _BARE_LEADING.match(filename)
     if m:

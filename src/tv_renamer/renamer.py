@@ -225,7 +225,7 @@ def plan_renames(
 
         if (
             fm.pattern is not None
-            and fm.pattern in ("bare_leading", "bare_trailing", "ep_prefix")
+            and fm.pattern in ("bare_leading", "bare_trailing", "ep_prefix", "cjk_suffix")
             and fm.episode > max_ep_per_season.get(season, 0)
         ):
             unmatched.append(fm.path)

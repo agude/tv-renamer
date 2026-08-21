@@ -32,6 +32,11 @@ from tv_renamer.matcher import FileMatch, extract_episode, match_files
         ("美少女戰士Crystal_EP01 阿兔 Sailor Moon.mp4", (None, 1, None, "ep_prefix")),
         ("Show_EP100.mp4", (None, 100, None, "ep_prefix")),
         ("[粵語] Show_EP42 Title.mp4", (None, 42, None, "ep_prefix")),
+        # CJK episode suffix
+        ("鬼灭之刃粤语1集.ts", (None, 1, None, "cjk_suffix")),
+        ("名侦探柯南42话.mp4", (None, 42, None, "cjk_suffix")),
+        ("銀魂100話.mkv", (None, 100, None, "cjk_suffix")),
+        ("忍たま3回.mp4", (None, 3, None, "cjk_suffix")),
         # No match
         ("Movie Title (2020).mkv", (None, None, None, None)),
         ("README.txt", (None, None, None, None)),
@@ -123,6 +128,25 @@ def test_extract_episode_resolution_not_matched(
     ],
 )
 def test_extract_episode_ep_prefix_edge_cases(
+    filename: str, expected: tuple[int | None, int | None, int | None, str | None]
+):
+    assert extract_episode(filename) == expected
+
+
+@pytest.mark.parametrize(
+    "filename, expected",
+    [
+        # CJK suffix zero is not valid
+        ("鬼灭之刃0集.ts", (None, None, None, None)),
+        # EP prefix takes priority over CJK suffix
+        ("EP01_1集.mp4", (None, 1, None, "ep_prefix")),
+        # CJK suffix with too many digits falls through
+        ("鬼灭之刃12345集.ts", (None, None, None, None)),
+        # Digit before the number blocks match
+        ("X12345集.ts", (None, None, None, None)),
+    ],
+)
+def test_extract_episode_cjk_suffix_edge_cases(
     filename: str, expected: tuple[int | None, int | None, int | None, str | None]
 ):
     assert extract_episode(filename) == expected

@@ -634,6 +634,32 @@ class TestBareNumberBounding:
         assert len(plan.ops) == 1
         assert "S01E01" in plan.ops[0].dest.name
 
+    def test_cjk_suffix_exceeding_tmdb_count_is_unmatched(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "鬼灭之刃粤语2020集.ts").touch()
+
+        episodes = _make_episodes(1, 26)
+        plan = plan_renames(
+            src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes, season_override=1
+        )
+
+        assert len(plan.ops) == 0
+        assert len(plan.unmatched) == 1
+
+    def test_cjk_suffix_within_range_still_matches(self, tmp_path: Path):
+        src = tmp_path / "source"
+        src.mkdir()
+        (src / "鬼灭之刃粤语3集.ts").touch()
+
+        episodes = _make_episodes(1, 26)
+        plan = plan_renames(
+            src, show_name="Show", year="2020", tmdb_id=99999, episodes=episodes, season_override=1
+        )
+
+        assert len(plan.ops) == 1
+        assert "S01E03" in plan.ops[0].dest.name
+
     def test_explicit_sxxexx_not_bounded(self, tmp_path: Path):
         src = tmp_path / "source"
         src.mkdir()
