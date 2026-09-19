@@ -336,9 +336,9 @@ Verify classification of movie files vs. episode-like files at the top level.
 
 ## Phase 6 — Documentation and cleanup
 
-### 6.1 Update `CLAUDE.md`
+### 6.1 Update `AGENTS.md`
 
-**Files:** `CLAUDE.md`
+**Files:** `AGENTS.md`
 
 Update architecture table to list any new modules. Update workflow section
 to cover movie commands. Add movie output format example.
